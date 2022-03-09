@@ -1,7 +1,4 @@
 
-@memoize gausslegendrenodes(sizetuple) = [gausslegendre(i)[1] for i in sizetuple]
-@memoize gausslegendreweights(sizetuple) = [gausslegendre(i)[2] for i in sizetuple]
-
 @memoize function volumemassmatrix(sizetuple, ::Type{LagrangeOrthogonal})
   N = length(sizetuple)
   v = zeros(prod(sizetuple)) # we know LagrangeOrthogonal polynomials are orthogonal, so only need a vector

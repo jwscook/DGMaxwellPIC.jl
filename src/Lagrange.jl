@@ -1,26 +1,32 @@
 
-function lagrange(x::T, nodes, ind::Integer) where {T<:Real}
+const AVAV = AbstractVector{<:AbstractVector}
+const AVN = AbstractVector{<:Number}
+
+@memoize function gausslegendrenodes(s, a=-ones(length(s)), b=ones(length(s)))
+  return [(gausslegendre(si)[1] .+ 1) ./2 .* (b[i] - a[i]) .+ a[i]  for (i, si) in enumerate(s)]
+end
+@memoize function gausslegendreweights(s, a=-ones(length(s)), b=ones(length(s)))
+  return [gausslegendre(si)[2] .* (b[i] - a[i])/2  for (i, si) in enumerate(s)]
+end
+
+#evaluate one function without coefficient
+function lagrange(x::Real, nodes::AVN, ind::Integer)
   otherindices = filter(j->!(j in ind), eachindex(nodes))
   return prod(x .- nodes[otherindices]) / prod(nodes[ind] .- nodes[otherindices])
 end
 
-function lagrangederiv(x::T, nodes, ind::Integer) where {T<:Real}
-  return sum(i-> 1 / (nodes[ind] .- nodes[i]) *
-    mapreduce(j->(x .- nodes[j]) / (nodes[ind] .- nodes[j]), *,
-              filter(j->!(j in (ind, i)), eachindex(nodes)); init=one(T)),
-    filter(i->!(i in ind), eachindex(nodes)))
-end
-
-
+#evaluate one function with coefficient
 for (fname) ∈ (:lagrange, :lagrangederiv)
-  @eval $(fname)(x::Real, nodes, ind::Integer, coeff::Number) = $(fname)(x, nodes, ind) * coeff
+  @eval $(fname)(x::Real, nodes::AVN, ind::Integer, coeff::Number) = $(fname)(x, nodes, ind) * coeff
 end
 
-function lagrange(x, nodes, inds, coeff::Number)
+#evaluate one cartesian product of functions for one coefficient
+function lagrange(x, nodes::AVAV, inds, coeff::Number)
   return prod(lagrange(x[i], nodes[i], inds[i]) for i in 1:length(x)) * coeff
 end
 
-function lagrange(x, nodes, coeffs)
+# evaluate all functions with all coefficients
+function lagrange(x, nodes::AVAV, coeffs)
   output = zero(promote_type(eltype(x), eltype(coeffs)))
   for i in CartesianIndices(coeffs)
     t = Tuple(i)
@@ -29,7 +35,38 @@ function lagrange(x, nodes, coeffs)
   return output
 end
 
-function lagrangederiv(x, nodes, inds, coeff::Number, derivdirection)
+
+
+# incrememnt lagrange coefficients by value as if a function value * DirecDelta(x)
+# hence division by the weight, w.
+function lagrange!(coeffs, x, nodes::AVAV, weights::AVAV, value)
+  for i in CartesianIndices(coeffs)
+    t = Tuple(i)
+    w = prod(weights[i][t[i]] for i in 1:length(x))
+    coeffs[i] += lagrange(x, nodes, Tuple(i), value) / w
+  end
+end
+function lagrange!(coeffs, nodes::AVAV, weights::AVAV, f::F, a, b) where {F<:Function}
+  for i in CartesianIndices(coeffs)
+    t = Tuple(i)
+    w = weights[1][t[1]] * weights[2][t[2]]
+    coeffs[i] = HCubature.hcubature(y->f(y) * lagrange(y, nodes, t, 1), a, b)[1] / w
+  end
+end
+
+
+# derivative of the ind^th nodal lagrange function associated with nodes at position x
+function lagrangederiv(x::Real, nodes::AVN, ind::Integer)
+  return sum(i-> 1 / (nodes[ind] - nodes[i]) *
+    mapreduce(j->(x - nodes[j]) / (nodes[ind] - nodes[j]), *,
+              filter(j->!(j in (ind, i)), eachindex(nodes)); init=one(T)),
+    filter(i->!(i in ind), eachindex(nodes)))
+end
+
+
+# evaluate derivative along the direction, dirdiection, of the nodal lagrange function
+# product associated with `coeff` for `nodes` at position x
+function lagrangederiv(x::AVAV, nodes::AVAV, inds::AVN, coeff::Number, derivdirection::Integer)
   output = one(promote_type(eltype(x), typeof(coeff)))
   for i in 1:length(x)
     if derivdirection == i
@@ -41,11 +78,8 @@ function lagrangederiv(x, nodes, inds, coeff::Number, derivdirection)
   return output
 end
 
-
-function lagrange!(coeffs, x, nodes, value)
-  for i in CartesianIndices(coeffs)
-    t = Tuple(i)
-    coeffs[i] += lagrange(x, nodes, Tuple(i), value)
-  end
+function lagrangederiv(x::AVAV, nodes::AVAV, coeffs::AbstractArray, derivdirection::Integer)
+  return mapreduce(i->lagrangederiv(x, nodes, Tuple(i), coeffs[i], derivdirection), +, CartesianIndices(coeffs))
 end
+
 
