@@ -1,7 +1,18 @@
 module DGMaxwellPIC
 
-using SpecialPolynomials, QuadGK, OffsetArrays, SparseArrays, Memoization, LinearAlgebra
-using StaticArrays, ConcreteStructs, FastGaussQuadrature
+using ConcreteStructs
+using FastGaussQuadrature
+using HaltonSequences
+using HCubature
+using LinearAlgebra
+using Memoization
+using OffsetArrays
+using Primes
+using QuadGK
+using SparseArrays
+using SpecialPolynomials
+using StaticArrays
+
 const speedoflight = 1.0
 const epsilon0 = 1.0
 
@@ -19,7 +30,7 @@ include("Grids.jl")
 include("DofUtilities.jl")
 include("Assembly.jl")
 include("Lagrange.jl")
-
+include("Particles.jl")
 
 function sources(g::Grid)
   A = volumemassmatrix(g)
@@ -43,15 +54,3 @@ export sources
 
 end # module
 
-#=
-const NX = 4
-const NY = 3
-const OX = 3
-const OY = 2
-
-state2D = State([OX, OY], LagrangeOrthogonal)
-magneticfielddofs!(state2D, 3, 1.0)
-
-grid2D = Grid([Cell(deepcopy(state2D), ((i-1)/NX, (j-1)/NY), (i/NX, j/NY)) for i in 1:NX, j in 1:NY])
-
-=#

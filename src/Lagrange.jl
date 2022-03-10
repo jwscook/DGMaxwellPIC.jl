@@ -35,6 +35,8 @@ function lagrange(x, nodes::AVAV, coeffs)
   return output
 end
 
+referencex(x, a, b) = @. (x - a) / (b - a) * 2 - 1
+globalx(x, a, b) = @. (x / 2 + 1) * (b - a) + a
 
 
 # incrememnt lagrange coefficients by value as if a function value * DirecDelta(x)
@@ -47,10 +49,15 @@ function lagrange!(coeffs, x, nodes::AVAV, weights::AVAV, value)
   end
 end
 function lagrange!(coeffs, nodes::AVAV, weights::AVAV, f::F, a, b) where {F<:Function}
+  physicalarea = prod(b .- a)
+  referencearea = 2^length(a)
+  arearatio = referencearea / physicalarea
   for i in CartesianIndices(coeffs)
     t = Tuple(i)
-    w = weights[1][t[1]] * weights[2][t[2]]
-    coeffs[i] = HCubature.hcubature(y->f(y) * lagrange(y, nodes, t, 1), a, b)[1] / w
+    w = prod(weights[j][t[j]] for j in 1:length(t))
+    @assert w > 0
+    integral = HCubature.hcubature(y->f(y) * lagrange(referencex(y, a, b), nodes, t, 1), a, b)[1]
+    coeffs[i] = integral / w * arearatio
   end
 end
 

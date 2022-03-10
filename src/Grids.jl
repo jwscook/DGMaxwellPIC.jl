@@ -23,7 +23,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
       $(fname)(s, i, data[i])
     end
   end
-  @eval function $(fnamedofs!)(s::State, component::Integer, data)
+  @eval function $(fnamedofs!)(s::State, data, component::Integer)
     @assert 1 <= component <= $len
     s.q[component + $offset] .= data
   end
@@ -62,7 +62,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     nodes = gausslegendrenodes(sizetuple)
     output = one(eltype(x))
     lagrange!(dofs, x, nodes, value)
-    $(fnamedofs!)(s, component, dofs)
+    $(fnamedofs!)(s, dofs, component)
   end
 
   @eval function $(fname!)(s::State{N}, x, values) where {N}
@@ -72,11 +72,21 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     end
   end
 
-  @eval $(fname)(cell::Cell{N}, args...) where {N} = $(fname)(state(cell), args...)
-  @eval $(fname!)(cell::Cell{N}, args...) where {N} = $(fname!)(state(cell), args...)
+  @eval function $(fname!)(c::Cell, f::F, component::Integer) where {F<:Function}
+    @assert 1 <= component <= $len
+    dofs = $(fnamedofs)(state(c), component)
+    sizetuple = size(dofs)
+    nodes = gausslegendrenodes(sizetuple)
+    weights = gausslegendreweights(sizetuple)
+    lagrange!(dofs, nodes, weights, f, lower(c), upper(c))
+    $(fnamedofs!)(state(c), dofs, component)
+  end
+
+  @eval $(fname)(cell::Cell, args...) = $(fname)(state(cell), localx(cell, args[1]), args[2:end]...)
+  @eval $(fname!)(cell::Cell, args...) = $(fname!)(state(cell), localx(cell, args[1]), args[2:end]...)
 
   @eval function $(fname)(g::Grid{N}, args...) where {N}
-    x = args[1]
+   x = args[1]
     c = cell(g, x)
     isnothing(c) && return zeros(eltype(x), $(len))
     return $(fname)(state(c), localx(c, x), args[2:end]...)
@@ -86,6 +96,12 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     x = args[1]
     c = cell(g, x)
     isnothing(c) || $(fname!)(state(c), localx(c, x), args[2:end]...)
+  end
+
+  @eval function $(fname!)(g::Grid, f::F, component::Integer) where {F<:Function}
+    for c in g
+      $(fname!)(c, f, component)
+    end
   end
 
 end
