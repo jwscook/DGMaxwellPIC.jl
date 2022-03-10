@@ -26,6 +26,6 @@ function distributionfunction(xv)
   return exp(-sum(v.^2))
 end
 
-particles = DGMaxwellPIC.particlephasepositions(distributionfunction, 10_000, [a..., -6, -6, -6], [b..., 6, 6, 6])
+particledata = DGMaxwellPIC.particledata(distributionfunction, 10_000, [a..., -6, -6, -6], [b..., 6, 6, 6])
 
 
