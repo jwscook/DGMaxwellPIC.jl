@@ -33,18 +33,23 @@ end
 
 particledata = DGMaxwellPIC.ParticleData(distributionfunction, 10_000, [a..., -6, -6, -6], [b..., 6, 6, 6])
 weight!(particledata, 1)
+@show magneticfield(grid2D, rand(2) .* (b .- a) .+ a)
+@show electricfield(grid2D, rand(2) .* (b .- a) .+ a)
 
 const plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)])
-depositcurrent!(grid2D, plasma)
 
 const A = assemble(grid2D)
 const S = sources(grid2D)
 
 u = dofs(grid2D)
 
-du = similar(u)
+dt = 0.01
 
 for i in 1:100
-  
+  depositcurrent!(grid2D, plasma)
+  S .= sources(grid2D)
+  u .+= (A * u .+ S) .* dt
+  dofs!(grid2D, u)
+  push!(plasma, grid2D, dt)
 end
 

@@ -24,4 +24,4 @@ for fname in (:position, :velocity, :weight, :xposition, :yposition, :zposition)
 end
 
 current(s::Species) = velocity(s) .* s.charge
-weightedcurrent(s::Species) = weight(s) .* current(s)
+weightedcurrent(s::Species) = weight(s)' .* current(s)
