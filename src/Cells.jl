@@ -4,6 +4,7 @@ struct Cell{N, T<:BasisFunctionType}
   lower # Tuple NTuple Vector, StaticVector, but all N-long
   upper
 end
+Base.in(x::Number, c::Cell{1}) = c.lower[1] <= x < c.upper[1]
 Base.in(x, c::Cell{N}) where N = all(i -> c.lower[i] <= x[i] < c.upper[i], 1:N)
 dofshape(c::Cell) = dofshape(c.state)
 jacobian(c::Cell{N}) where N = prod((c.upper .- c.lower)) / 2^N

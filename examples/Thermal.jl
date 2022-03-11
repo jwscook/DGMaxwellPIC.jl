@@ -17,7 +17,12 @@ magneticfield!(grid2D, x->1.0, 3) # set z field to 1
 a = randn(2)
 b = a .+ rand(2)
 cell = Cell(deepcopy(state2D), a, b)
-magneticfield!(cell, x->1, 3)
+
+
+@show DGMaxwellPIC.divB(grid2D, rand(2) .* (b .- a) .+ a)
+@show DGMaxwellPIC.divB(grid2D, rand(2) .* (b .- a) .+ a)
+@show DGMaxwellPIC.divB(grid2D, rand(2) .* (b .- a) .+ a)
+
 @show magneticfield(cell, rand(2) .* (b .- a) .+ a)
 
 function distributionfunction(xv)
@@ -26,6 +31,20 @@ function distributionfunction(xv)
   return exp(-sum(v.^2))
 end
 
-particledata = DGMaxwellPIC.particledata(distributionfunction, 10_000, [a..., -6, -6, -6], [b..., 6, 6, 6])
+particledata = DGMaxwellPIC.ParticleData(distributionfunction, 10_000, [a..., -6, -6, -6], [b..., 6, 6, 6])
+weight!(particledata, 1)
 
+const plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)])
+depositcurrent!(grid2D, plasma)
+
+const A = assemble(grid2D)
+const S = sources(grid2D)
+
+u = dofs(grid2D)
+
+du = similar(u)
+
+for i in 1:100
+  
+end
 

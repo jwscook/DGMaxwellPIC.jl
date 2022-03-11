@@ -2,6 +2,7 @@ module DGMaxwellPIC
 
 using ConcreteStructs
 using FastGaussQuadrature
+using ForwardDiff
 using HaltonSequences
 using HCubature
 using LinearAlgebra
@@ -30,17 +31,10 @@ include("Grids.jl")
 include("DofUtilities.jl")
 include("Assembly.jl")
 include("Lagrange.jl")
-include("Particles.jl")
-
-function sources(g::Grid)
-  A = volumemassmatrix(g)
-  x = sparsevec(1:currentndofs(g), currentdofs(g), ndofs(g))
-  return A * x
-end
-
-function depositcurrent(g::Grid, x, current)
-
-end
+include("ParticleData.jl")
+include("ParticlePushers.jl")
+include("Species.jl")
+include("Plasma.jl")
 
 export LagrangeOrthogonal
 export lagrange
@@ -49,8 +43,10 @@ export electricfield, magneticfield, currentfield, chargefield
 export electricfield!, magneticfield!, currentfield!, chargefield!
 export facedofindices, dofs
 export assemble
-export depositcurrent
+export depositcurrent!
 export sources
+export Species, weight!
+export Plasma
 
 end # module
 

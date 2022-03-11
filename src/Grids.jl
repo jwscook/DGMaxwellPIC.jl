@@ -9,7 +9,6 @@ Base.iterate(g::Grid, state) = iterate(g.data, state)
 boundingbox(g::Grid) = (minimum(x->x.min, g), maximum(x->x.max, g))
 zero!(g::Grid) = zero!.(g.data)
 
-
 for (fname, offset, len) ∈ ((:electricfield, 0, 3),
                             (:magneticfield, 3, 3),
                             (:currentfield, 6, 3),
@@ -60,8 +59,9 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     dofs = $(fnamedofs)(s, component)
     sizetuple = size(dofs)
     nodes = gausslegendrenodes(sizetuple)
+    weights = gausslegendreweights(sizetuple)
     output = one(eltype(x))
-    lagrange!(dofs, x, nodes, value)
+    lagrange!(dofs, x, nodes, weights, value)
     $(fnamedofs!)(s, dofs, component)
   end
 
@@ -80,6 +80,11 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     weights = gausslegendreweights(sizetuple)
     lagrange!(dofs, nodes, weights, f, lower(c), upper(c))
     $(fnamedofs!)(state(c), dofs, component)
+  end
+  @eval function $(fname!)(c::Cell, f::F) where {F<:Function}
+    for component in 1:$len
+      $(fname!)(c, x->f(x)[component], component)
+    end
   end
 
   @eval $(fname)(cell::Cell, args...) = $(fname)(state(cell), localx(cell, args[1]), args[2:end]...)
@@ -104,6 +109,12 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     end
   end
 
+  @eval function $(fname!)(g::Grid, f::F) where {F<:Function}
+    for component in 1:$len, c in g
+      $(fname!)(c, x->f(x)[component], component)
+    end
+  end
+
 end
 
 function cell(g::Grid, x)
@@ -122,4 +133,19 @@ function componentindexoffset(s::State, component::Integer)
   end
   return ind
 end
+
+function divergence(g::Grid{N}, x, f::F) where {N, F}
+  j = ForwardDiff.jacobian(y->f(g, y), x)
+  return sum(j[i, i] for i in 1:N)
+end
+
+divB(g::Grid, x) = divergence(g, x, magneticfield)
+divE(g::Grid, x) = divergence(g, x, electricfield)
+
+function sources(g::Grid)
+  A = volumemassmatrix(g)
+  x = sparsevec(1:currentndofs(g), currentdofs(g), ndofs(g))
+  return A * x
+end
+
 

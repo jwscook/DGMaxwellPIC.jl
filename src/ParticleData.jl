@@ -21,6 +21,10 @@ position!(p::ParticleData{N}, x, i::Integer) where {N} = (p.data[i, 1:N] .= x; p
 velocity!(p::ParticleData{N}, v, i::Integer) where {N} = (p.data[i, N+1:N+3] .= v; p)
 weight!(p::ParticleData{N}, w, i::Integer) where {N} = (p.data[i, N+4] .= w; p)
 
+position(p::ParticleData{N}) where {N} = @view p.data[:, 1:N]
+velocity(p::ParticleData{N}) where {N} = @view p.data[:, N+1:N+3]
+weight(p::ParticleData{N}) where {N} = @view p.data[:, N+4]
+
 for DIM in (3, 2, 1)
   @eval xposition(p::ParticleData{$DIM}) = @view p.data[:, 1]
   @eval xposition!(p::ParticleData{$DIM}, x) = (@views p.data[:, 1] .= x; p)
@@ -34,7 +38,6 @@ zposition!(p::ParticleData{N}, z) where {N} = (@views p.data[:, 3] .= z; p)
 xvelocity(p::ParticleData{N}) where {N} = @view p.data[:, N+1]
 yvelocity(p::ParticleData{N}) where {N} = @view p.data[:, N+2]
 zvelocity(p::ParticleData{N}) where {N} = @view p.data[:, N+3]
-weight(p::ParticleData{N}) where {N} = @view p.data[:, N+4]
 
 xvelocity!(p::ParticleData{N}, v) where {N} = (@views p.data[:, N+1] .= v; p)
 yvelocity!(p::ParticleData{N}, v) where {N} = (@views p.data[:, N+2] .= v; p)
