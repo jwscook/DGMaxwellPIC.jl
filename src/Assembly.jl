@@ -129,17 +129,10 @@ function volumemassmatrix(g::Grid{N,T}) where {N,T}
   return assembler(g, volumemassmatrix)
 end
 
-@memoize function indices(g::Grid{N,T}, cellindices, fndofs::F=ndofs) where {N,T,F}
-  @assert all(ones(N) .<= cellindices .<= size(g.data))
-  offset = 0
-  for i in CartesianIndices(g.data)
-    if all(j->isequal(j...), zip(cellindices, Tuple(i)))
-      return (1:fndofs(g[i])) .+ offset
-    end
-    offset += fndofs(g[i])
-  end
-  throw(ErrorException("Shouldn't be able to get here"))
+@memoize function indices(g::Grid{N,T}, cellindices) where {N,T,F}
+  return (1:ndofs(g[cellindices...])) .+ offsetindex(g, cellindices)
 end
+
 
 function surfacefluxmassmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
   gridsize = size(g)

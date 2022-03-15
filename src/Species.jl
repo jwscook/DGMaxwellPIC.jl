@@ -23,5 +23,4 @@ for fname in (:position, :velocity, :weight, :xposition, :yposition, :zposition)
   @eval $(fname!)(s::Species, args...) = $(fname!)(s.particledata, args...)
 end
 
-current(s::Species) = velocity(s) .* s.charge
-weightedcurrent(s::Species) = weight(s)' .* current(s)
+#current(s::Species) = velocity(s) .* s.charge .* weight(s)

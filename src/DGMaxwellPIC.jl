@@ -2,9 +2,11 @@ module DGMaxwellPIC
 
 using ConcreteStructs
 using FastGaussQuadrature
+using FLoops
 using ForwardDiff
 using HaltonSequences
 using HCubature
+using LazyArrays
 using LinearAlgebra
 using Memoization
 using OffsetArrays
@@ -46,7 +48,7 @@ export assemble
 export depositcurrent!
 export sources
 export Species, weight!
-export Plasma
+export Plasma, advance!
 
 end # module
 

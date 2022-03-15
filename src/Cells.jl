@@ -16,6 +16,7 @@ localx(c::Cell, x) = (x .- c.lower) ./ (c.upper .- c.lower) .* 2 .- 1
 boundingbox(c::Cell) = (c.lower, c.upper)
 lower(c::Cell) = c.lower
 upper(c::Cell) = c.upper
+centre(c::Cell) = (lower(c) .+ upper(c)) ./ 2
 function dofs!(c::Cell, x)
   l = prod(dofshape(c))
   for i in 1:6, j in LinearIndices(dofshape(c))
@@ -23,5 +24,6 @@ function dofs!(c::Cell, x)
   end
   return c
 end
+dofs!(c::Cell, x) = dofs!(state(c), x)
 zero!(c::Cell) = zero!(c.state)
 

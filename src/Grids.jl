@@ -1,12 +1,19 @@
 
 struct Grid{N,T<:BasisFunctionType}
   data::Array{Cell{N, T}, N}
+  lower::Vector{Float64}
+  upper::Vector{Float64}
+  Grid(data::Array{Cell{N, T},N}) where {N,T} = new{N,T}(data,
+                                                         collect(minimum(x->x.lower, data)),
+                                                         collect(maximum(x->x.upper, data)))
 end
 Base.getindex(g::Grid, i...) = g.data[i...]
 Base.size(g::Grid) = size(g.data)
 Base.iterate(g::Grid) = iterate(g.data)
 Base.iterate(g::Grid, state) = iterate(g.data, state)
-boundingbox(g::Grid) = (minimum(x->x.min, g), maximum(x->x.max, g))
+lower(g::Grid) = g.lower
+upper(g::Grid) = g.upper
+boundingbox(g::Grid) = (lower(g), upper(g))
 zero!(g::Grid) = zero!.(g.data)
 
 for (fname, offset, len) ∈ ((:electricfield, 0, 3),
@@ -91,11 +98,20 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
   @eval $(fname!)(cell::Cell, args...) = $(fname!)(state(cell), localx(cell, args[1]), args[2:end]...)
 
   @eval function $(fname)(g::Grid{N}, args...) where {N}
-   x = args[1]
+    x = args[1]
     c = cell(g, x)
     isnothing(c) && return zeros(eltype(x), $(len))
     return $(fname)(state(c), localx(c, x), args[2:end]...)
   end
+
+  @eval function $(fname)(g::Grid, component::Integer)
+    output = zeros(size(g))
+    for i in CartesianIndices(size(g))
+      output[i] = $fname(g[i], centre(g[i]), component)
+    end
+    return output
+  end
+  @eval $(fname)(g::Grid) = ($(fname)(g, i) for i in 1:$len)
 
   @eval function $(fname!)(g::Grid{N}, args...) where {N}
     x = args[1]
@@ -117,10 +133,30 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
 
 end
 
-function cell(g::Grid, x)
-  for c in g
-    in(x, c) && return c
+function cellcentres(g::Grid{N}) where {N}
+  output = Array{Union{Nothing, Any}}(nothing, size(g))
+  for i in CartesianIndices(size(g))
+    output[collect(Tuple(i))] = centre(g[i])
   end
+  return output
+end
+
+
+function cell(g::Grid{N}, x) where {N}
+  @assert !any(isnan, x) "x=$x"
+  lb = lower(g)
+  ub = upper(g)
+  sg = size(g)
+  index = [Int(ceil(sg[i] * (x[i] - lb[i])/(ub[i] - lb[i]))) for i in eachindex(x)]
+  any(index .< 1) && return nothing
+  any(index .> size(g)) && return nothing
+  c = g[index...]
+  @assert in(x, c) "$(lower(c)), $x, $(upper(c))"
+  return c
+#  for i in CartesianIndices(size(g))
+#    c = g[i]
+#    in(x, c) && return c
+#  end
 end
 
 componentindexoffset(cell::Cell, component::Integer) = componentindexoffset(state(cell), component)
@@ -144,7 +180,7 @@ divE(g::Grid, x) = divergence(g, x, electricfield)
 
 function sources(g::Grid)
   A = volumemassmatrix(g)
-  x = sparsevec(1:currentndofs(g), currentdofs(g), ndofs(g))
+  x = currentsource(g)
   return A * x
 end
 

@@ -55,7 +55,7 @@ sequencesize(h::HaltonSampler, dim) = prod(prime(i) for i in 1:dim)
 sequencesize(r::RandomSampler, dim) = 1
 
 function particledata(distributionfunction::F, npart_upperbound::Integer, lowerxv, upperxv,
-    sampler::AbstractParticleSampler=HaltonSampler()) where {F}
+    sampler::AbstractParticleSampler=HaltonSampler(), offsets=rand(length(lowerxv))) where {F}
   NXV = length(lowerxv)
   NXVW = NXV + 1
   seqsize = sequencesize(sampler, NXV+1)
@@ -64,7 +64,9 @@ function particledata(distributionfunction::F, npart_upperbound::Integer, lowerx
   lastfullsequence = 0
   i = 0
   while i < npart_upperbound
-    xv = [sampler(seqcount, prime(i)) for i in 1:NXV]  .* (upperxv .- lowerxv) .+ lowerxv
+    xv = mod.([sampler(seqcount, prime(i)) for i in 1:NXV] .+ offsets, 1)
+    @assert all(0 .<= xv[:] .<= 1)
+    xv .= xv .* (upperxv .- lowerxv) .+ lowerxv
     y = sampler(seqcount, prime(NXV+1))
     seqcount += 1
     if y < distributionfunction(xv)

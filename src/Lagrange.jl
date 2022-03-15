@@ -2,18 +2,26 @@
 const AVAV = AbstractVector{<:AbstractVector}
 const AVN = AbstractVector{<:Number}
 
-@memoize function gausslegendrenodes(s, a=-ones(length(s)), b=ones(length(s)))
+function gausslegendrenodes(s, a=-ones(length(s)), b=ones(length(s)))
   return [(gausslegendre(si)[1] .+ 1) ./2 .* (b[i] - a[i]) .+ a[i]  for (i, si) in enumerate(s)]
 end
-@memoize function gausslegendreweights(s, a=-ones(length(s)), b=ones(length(s)))
+function gausslegendreweights(s, a=-ones(length(s)), b=ones(length(s)))
   return [gausslegendre(si)[2] .* (b[i] - a[i])/2  for (i, si) in enumerate(s)]
 end
 
 #evaluate one function without coefficient
-function lagrange(x::Real, nodes::AVN, ind::Integer)
-  otherindices = filter(j->!(j in ind), eachindex(nodes))
-  return prod(x .- nodes[otherindices]) / prod(nodes[ind] .- nodes[otherindices])
+function lagrange(x::R, nodes::AVN, ind::Integer) where {R<:Real}
+  T = promote_type(R, eltype(nodes))
+  output = one(T)
+  for j in eachindex(nodes)
+    j == ind && continue
+    output *= (x - nodes[j]) / (nodes[ind] - nodes[j])
+  end
+  return output
+  #otherindices = filter(j->!(j in ind), eachindex(nodes))
+  #return prod(x .- nodes[otherindices]) / prod(nodes[ind] .- nodes[otherindices])
 end
+
 
 #evaluate one function with coefficient
 for (fname) ∈ (:lagrange, :lagrangederiv)
@@ -29,7 +37,6 @@ end
 function lagrange(x, nodes::AVAV, coeffs)
   output = zero(promote_type(eltype(x), eltype(coeffs)))
   for i in CartesianIndices(coeffs)
-    t = Tuple(i)
     output += lagrange(x, nodes, Tuple(i), coeffs[i])
   end
   return output
@@ -52,7 +59,7 @@ function lagrange!(coeffs, nodes::AVAV, weights::AVAV, f::F, a, b) where {F<:Fun
   physicalarea = prod(b .- a)
   referencearea = 2^length(a)
   arearatio = referencearea / physicalarea
-  for i in CartesianIndices(coeffs)
+  @floop for i in CartesianIndices(coeffs)
     t = Tuple(i)
     w = prod(weights[j][t[j]] for j in 1:length(t))
     @assert w > 0

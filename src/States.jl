@@ -11,3 +11,11 @@ Base.size(s::State) = size(s.q[1])
 dofshape(s::State) = size(s.q[1])
 zero!(s::State) = fill!.(s.q, 0)
 
+function dofs!(s::State, x)
+  l = prod(dofshape(s))
+  for i in 1:6, j in LinearIndices(dofshape(s))
+    s.q[i][j] = x[(i-1)*l + j]
+  end
+  return s
+end
+
