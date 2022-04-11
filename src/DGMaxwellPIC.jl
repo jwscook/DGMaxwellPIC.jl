@@ -1,5 +1,6 @@
 module DGMaxwellPIC
 
+using Base.Threads
 using ConcreteStructs
 using FastGaussQuadrature
 using FLoops
@@ -8,6 +9,7 @@ using HaltonSequences
 using HCubature
 using LazyArrays
 using LinearAlgebra
+#using Memoize
 using Memoization
 using OffsetArrays
 using Primes
@@ -16,30 +18,23 @@ using SparseArrays
 using SpecialPolynomials
 using StaticArrays
 
-const speedoflight = 1.0
+const speedoflight = 10.0
 const epsilon0 = 1.0
-
-abstract type BasisFunctionType end
-abstract type Lagrange <: BasisFunctionType end
-struct LagrangeOrthogonal <: Lagrange end
-#struct Chebyshev <: BasisFunctionType end # implement later if necessary
-#struct Legendre <: BasisFunctionType end # implement later if necessary
 
 @enum FaceDirection High Low
 
+include("Lagrange.jl")
 include("States.jl")
 include("Cells.jl")
 include("Grids.jl")
 include("DofUtilities.jl")
 include("Assembly.jl")
-include("Lagrange.jl")
 include("ParticleData.jl")
 include("ParticlePushers.jl")
 include("Species.jl")
 include("Plasma.jl")
 
-export LagrangeOrthogonal
-export lagrange
+export lagrange, LegendreNodes, LobattoNodes
 export State, Cell, Grid
 export electricfield, magneticfield, currentfield, chargefield
 export electricfield!, magneticfield!, currentfield!, chargefield!
