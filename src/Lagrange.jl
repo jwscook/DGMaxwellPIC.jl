@@ -214,7 +214,6 @@ end
 
 
 function massmatrix(nodesi::NDimNodes, nodesj::NDimNodes, a=_a(nodesi), b=_b(nodesi))
-#  @info "Calling memoized massmatrix(nodesi, nodesj, a, b)"
   szi = Tuple(length(n) for n in nodesi)
   szj = Tuple(length(n) for n in nodesj)
   M = zeros(prod(szi), prod(szj))
@@ -230,30 +229,26 @@ massmatrix(nodes::NDimNodes, a=_a(nodes), b=_b(nodes)) = massmatrix(nodes, nodes
 lumassmatrix(args...) = lu(massmatrix(args...))
 
 
-const fluxmassmatrixdict = Dict{UInt64, Any}()
+const surfacefluxmassmatrixdict = Dict{UInt64, Any}()
 
-function surfacefluxmassmatrix(nodes::NDimNodes{N}, dim::Int64, side::FaceDirection) where {N}
-  return fluxmassmatrx(nodes, nodes, dim, side)
-end
+surfacefluxmassmatrix(n::NDimNodes, dim::Int64, side::FaceDirection) = surfacefluxmassmatrix(n, n, dim, side)
 
 function surfacefluxmassmatrix(nodesi::NDimNodes{1}, nodesj::NDimNodes{1}, dim::Int64, side::FaceDirection)
   @assert dim == 1
   key = mapreduce(hash, hash, (nodesi, nodesj, dim, side))
-  haskey(fluxmassmatrixdict, key) && return fluxmassmatrixdict[key]
+  haskey(surfacefluxmassmatrixdict, key) && return surfacefluxmassmatrixdict[key]
   x = side == Low ? -1 : 1
   szi = Tuple(length(n) for n in nodesi)
   szj = Tuple(length(n) for n in nodesj)
   output = zeros(prod(szi), prod(szj))
   for (j, jj) in enumerate(CartesianIndices(szj)), (i, ii) in enumerate(CartesianIndices(szi))
-    output[i, j] = lagrange(x, nodesi[1], i) * lagrangederiv(x, nodesj[1], j)
+    output[i, j] = lagrange(x, nodesi[1], i) * lagrange(x, nodesj[1], j)
   end
-  output[key] = output
+  surfacefluxmassmatrixdict[key] = output
   return output
 end
 
-const surfacefluxmassmatrixdict = Dict{UInt64, Any}()
-
-function surfacefluxmassmatrix(nodesi::NDimNodes{T}, nodesj::NDimNodes{T}, dim::Int64, side::FaceDirection) where T
+function surfacefluxmassmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::Int64, side::FaceDirection)
   N = ndims(nodesi)
   @assert 0 < dim <= N
   @assert N == ndims(nodesj)
@@ -265,14 +260,14 @@ function surfacefluxmassmatrix(nodesi::NDimNodes{T}, nodesj::NDimNodes{T}, dim::
   szj = Tuple(length(n) for n in nodesj)
   output = ones(prod(szi), prod(szj))
   for (j, jj) in enumerate(CartesianIndices(szj)), (i, ii) in enumerate(CartesianIndices(szi))
-    iit, jjt = Tuple(ii), Tuple(ii)
-    for d in 1:N
+    for d in 1:N # integrating over face at *side* of cell at const *dim*
+      indi, indj = Tuple(ii)[d], Tuple(jj)[d]
+      kernel(x) = lagrange(x, nodesi[d], indi) * lagrange(x, nodesj[d], indj)
       if d == dim
         x = side == Low ? -1.0 : 1.0
-        output[i,j] *= lagrange(x, nodesi[d], iit[d]) * lagrange(x, nodesj[d], jjt[d])
+        output[i,j] *= kernel(x)
       else
-        kernel(x) = lagrange(x, nodesi[d], iit[d]) * lagrange(x, nodesj[d], jjt[d])
-        output[i,j] *= quadgk(kernel,-1, 1, rtol=eps())[1]
+        output[i,j] *= quadgk(kernel, -1, 1, rtol=eps())[1]
       end
     end
   end
@@ -295,14 +290,14 @@ function volumefluxmassmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::Int)
   szi = Tuple(length(n) for n in nodesi)
   szj = Tuple(length(n) for n in nodesj)
   output = ones(prod(szi), prod(szj))
-  quad = quadrature(Val(N))
+  #quad = quadrature(Val(N))
   for d in 1:N
     for (j, jj) in enumerate(CartesianIndices(szj)), (i, ii) in enumerate(CartesianIndices(szi))
-      iit, jjt = Tuple(ii), Tuple(ii)
+      indi, indj = Tuple(ii)[d], Tuple(jj)[d]
       if d == dim
-        output[i, j] *= QuadGK.quadgk(y->lagrange(y, nodesi[d], iit[d]) * lagrangederiv(y, nodesj[d], jjt[d]), -1, 1)[1]
+        output[i, j] *= QuadGK.quadgk(y->lagrange(y, nodesi[d], indi) * lagrangederiv(y, nodesj[d], indj), -1, 1)[1]
       else
-        output[i, j] *= QuadGK.quadgk(y->lagrange(y, nodesi[d], iit[d]) * lagrange(y, nodesj[d], jjt[d]), -1, 1)[1]
+        output[i, j] *= QuadGK.quadgk(y->lagrange(y, nodesi[d], indi) * lagrange(y, nodesj[d], indj), -1, 1)[1]
       end
     end
   end
@@ -331,12 +326,12 @@ end
 # evaluate derivative along the direction, dirdiection, of the nodal lagrange function
 # product associated with `coeff` for `nodes` at position x
 function lagrangederiv(x, nodes::NDimNodes, inds, coeff::Number, derivdirection::Integer)
-  output = one(promote_type(eltype(x), typeof(coeff)))
+  output = one(promote_type(eltype(x), typeof(coeff))) * coeff
   for i in 1:length(x)
     if derivdirection == i
-      output *= (lagrangederiv(x[i], nodes[i], inds[i]) for i in 1:length(x)) * coeff
+      output *= (lagrangederiv(x[i], nodes[i], inds[i]) for i in 1:length(x))
     else
-      output *= (lagrange(x[i], nodes[i], inds[i]) for i in 1:length(x)) * coeff
+      output *= (lagrange(x[i], nodes[i], inds[i]) for i in 1:length(x))
     end
   end
   return output
