@@ -1,49 +1,49 @@
 
 @memoize function indices(g::Grid{N,T}, cellindices) where {N,T,F}
+  # TODO fix need to index by cellindices... i.e. with splat
   return (1:ndofs(g[cellindices...])) .+ offsetindex(g, cellindices)
 end
 
-function findneighbour(g::Grid{N}, homeindex, searchdir, side) where N
+function findneighbourgridindex(g::Grid{N}, homeindex, searchdir, side) where N
   gridsize = size(g)
   return [mod1(homeindex[j] + (searchdir == j) * ((side == Low) ? -1 : 1), gridsize[j]) for j in 1:N]
 end
 
 _fluxmatrix(stencil, x::AbstractArray) = sparse(kron(stencil, x))
-upwindfluxmatrix(::Val{1}, x) = _fluxmatrix((@SArray [0 0 0; -1 1 0; -1 0 1]), x)
-upwindfluxmatrix(::Val{2}, x) = _fluxmatrix((@SArray [1 -1 0; 0 0 0; 0 -1 1]), x)
-upwindfluxmatrix(::Val{3}, x) = _fluxmatrix((@SArray [1 0 -1; 0 1 -1; 0 0 0]), x)
+upwindfluxmatrix(::Val{1}, x) = _fluxmatrix((@SArray [0 0 0; 0 1 0; 0 0 1]), x)
+upwindfluxmatrix(::Val{2}, x) = _fluxmatrix((@SArray [1 0 0; 0 0 0; 0 0 1]), x)
+upwindfluxmatrix(::Val{3}, x) = _fluxmatrix((@SArray [1 0 0; 0 1 0; 0 0 0]), x)
 #@memoize upwindfluxmatrix(::Val{T}, n::Integer) where {T} = fluxmatrix(Val(T), I(n))
 #upwindfluxmatrix(s::State{N}, a) where N = sum(upwindfluxmatrix(Val(i), a) for i in 1:N)
 
 fluxmatrix(::Val{1}, x) = _fluxmatrix((@SArray [0 0 0; 0 0 1; 0 -1 0]), x)
-fluxmatrix(::Val{2}, x) = _fluxmatrix((@SArray [0 0 1; 0 0 0; -1 0 0]), x)
-fluxmatrix(::Val{3}, x) = _fluxmatrix((@SArray [0 -1 0; 1 0 0; 0 0 0]), x)
-@memoize fluxmatrix(::Val{T}, n::Integer) where {T} = fluxmatrix(Val(T), I(n))
+fluxmatrix(::Val{2}, x) = _fluxmatrix((@SArray [0 0 -1; 0 0 0; 1 0 0]), x)
+fluxmatrix(::Val{3}, x) = _fluxmatrix((@SArray [0 1 0; -1 0 0; 0 0 0]), x)
+#@memoize fluxmatrix(::Val{T}, n::Integer) where {T} = fluxmatrix(Val(T), I(n))
 
-function surfacefluxmassmatrix(cell::Cell, nodes::NDimNodes, dim, side::FaceDirection, upwind=0.0)
+function surfacefluxstiffnessmatrix(cell::Cell, nodes::NDimNodes, dim, side::FaceDirection, upwind=0.0)
   output = spzeros(ndofs(cell), ndofs(cell))
-  return surfacefluxmassmatrix!(output, cell, nodes, dim, side, upwind)
+  return surfacefluxstiffnessmatrix!(output, cell, nodes, dim, side, upwind)
 end
 
-function surfacefluxmassmatrix!(output, cell::Cell, nodes::NDimNodes, dim, side::FaceDirection,
+function surfacefluxstiffnessmatrix!(output, cell::Cell, nodes::NDimNodes, dim, side::FaceDirection,
     upwind=0.0)
   @assert size(output) == (ndofs(cell), ndofs(cell))
   nc = ndofs(cell, 1) # number of dofs per component
-  sfmm = surfacefluxmassmatrix(nodes, nodes, dim, side)
-  @assert size(sfmm) == (nc, nc)
+  sfmm = surfacefluxstiffnessmatrix(nodes, nodes, dim, side)
+  @assert size(sfmm) == (nc, nc) "$(size(sfmm)) != ($nc, $nc)"
   fm = fluxmatrix(Val(dim), sfmm)
   @views output[1:3nc, 3nc+1:6nc] .+= fm .* speedoflight^2
   @views output[3nc+1:6nc, 1:3nc] .-= fm
   if !iszero(upwind)
-    ufm = upwindfluxmatrix(Val(dim), sfmm) .* speedoflight^2 * upwind / 2
-    fm = fluxmatrix(Val(dim), ufm)
-    @views output[1:3nc, 1:3nc] .+= fm .* epsilon0
-    @views output[3nc+1:6nc, 3nc+1:6nc] .+= fm
+    ufm = upwindfluxmatrix(Val(dim), sfmm) * upwind
+    @views output[1:3nc, 1:3nc] .+= ufm .* epsilon0
+    @views output[3nc+1:6nc, 3nc+1:6nc] .+= ufm
   end
   return output
 end
 
-function surfacefluxmassmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
+function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
   gridsize = size(g)
   n = ndofs(g)
   output = spzeros(n,n)
@@ -53,23 +53,28 @@ function surfacefluxmassmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
     nodes = NDimNodes(dofshape(cell), T)
     celldofindices = indices(g, cellindex)
     for dim in 1:N, (side, factor) in ((Low, -1), (High, 1))
-      neighbourdofindices = indices(g, findneighbour(g, cellindex, dim, side))
-      flux = factor .* surfacefluxmassmatrix(cell, nodes, dim, side, upwind) * jacobian(cell; ignore=dim)
-      #@views output[neighbourdofindices, celldofindices] .+= flux
-      @views output[celldofindices, neighbourdofindices] .+= flux
+      flux = surfacefluxstiffnessmatrix(cell, nodes, dim, side, upwind)
+      flux .*= factor * jacobian(cell; ignore=dim)
       @views output[celldofindices, celldofindices] .-= flux
+
+      neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, opposite(side))
+      neighbourcell = g[neighbourcellgridindex...]
+      flux = surfacefluxstiffnessmatrix(neighbourcell, nodes, dim, opposite(side), upwind)
+      flux .*= factor * jacobian(cell; ignore=dim)
+      neighbourdofindices = indices(g, neighbourcellgridindex)
+      @views output[celldofindices, neighbourdofindices] .+= flux
     end
   end
   return output
 end
 
 
-function volumefluxmassmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
+function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
   ns = ndofs(cell)
   output = spzeros(ns, ns)
   nc = ndofs(cell, 1) # number of dofs per component
   for dim in 1:N
-    fmm = volumefluxmassmatrix(nodes, nodes, dim) * jacobian(cell)
+    fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell)
     fm = fluxmatrix(Val(dim), fmm)
     @views output[1:3nc, 3nc+1:6nc] .+= fm .* speedoflight^2
     @views output[3nc+1:6nc, 1:3nc] .-= fm
@@ -91,8 +96,8 @@ function assembler(g::Grid{N,T}, f::F) where {N,T, F}
   end
   return output 
 end
-function volumefluxmassmatrix(g::Grid{N,T}) where {N,T}
-  return assembler(g, volumefluxmassmatrix)
+function volumefluxstiffnessmatrix(g::Grid{N,T}) where {N,T}
+  return assembler(g, volumefluxstiffnessmatrix)
 end
 
 function volumemassmatrix(g::Grid{N,T}) where {N,T}
@@ -100,7 +105,7 @@ function volumemassmatrix(g::Grid{N,T}) where {N,T}
 end
 
 function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
-  return volumemassmatrix(g) \ (volumefluxmassmatrix(g) .+ surfacefluxmassmatrix(g, upwind))
+  return Matrix(volumemassmatrix(g)) \ (volumefluxstiffnessmatrix(g) .+ surfacefluxstiffnessmatrix(g, upwind))
 end
 
 

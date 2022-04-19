@@ -162,9 +162,10 @@ function lagrange!(dofs, nodes::NDimNodes, f::F, a=_a(nodes), b=_b(nodes),
     solvedofsornot::MaybeSolveDofs=SolveDofsNow()) where {F<:Function}
   quad = quadrature(nodes)
   @assert size(dofs) == Tuple(length(n) for n in nodes)
+  fill!(dofs, 0)
   for i in CartesianIndices(dofs)
     t = Tuple(i)
-    dofs[i] = quad(y->f(y) * lagrange(y, nodes, t, 1), a, b, atol=eps(), rtol=sqrt(eps()))[1]
+    dofs[i] = quad(x->f(x) * lagrange(x, nodes, t, 1), a, b, atol=10eps(), rtol=sqrt(eps()))[1]
   end
   maybesolvedofs!(dofs, nodes, a, b, solvedofsornot)
 end
@@ -173,7 +174,7 @@ end
   @warn "Using non-orthogonal nodes $T, $U"
   output = zeros(length(nodesi), length(nodesj))
   for j in eachindex(nodesj), i in eachindex(nodesi)
-    output[i, j] = QuadGK.quadgk(y->lagrange(y, nodesi, i, 1) * lagrange(y, nodesj, j, 1), a, b)[1]
+    output[i, j] = QuadGK.quadgk(x->lagrange(x, nodesi, i, 1) * lagrange(x, nodesj, j, 1), a, b)[1]
   end
   return output
 end
@@ -229,14 +230,14 @@ massmatrix(nodes::NDimNodes, a=_a(nodes), b=_b(nodes)) = massmatrix(nodes, nodes
 lumassmatrix(args...) = lu(massmatrix(args...))
 
 
-const surfacefluxmassmatrixdict = Dict{UInt64, Any}()
+const surfacefluxstiffnessmatrixdict = Dict{UInt64, Any}()
 
-surfacefluxmassmatrix(n::NDimNodes, dim::Int64, side::FaceDirection) = surfacefluxmassmatrix(n, n, dim, side)
+surfacefluxstiffnessmatrix(n::NDimNodes, dim::Int64, side::FaceDirection) = surfacefluxstiffnessmatrix(n, n, dim, side)
 
-function surfacefluxmassmatrix(nodesi::NDimNodes{1}, nodesj::NDimNodes{1}, dim::Int64, side::FaceDirection)
+function surfacefluxstiffnessmatrix(nodesi::NDimNodes{1}, nodesj::NDimNodes{1}, dim::Int64, side::FaceDirection)
   @assert dim == 1
   key = mapreduce(hash, hash, (nodesi, nodesj, dim, side))
-  haskey(surfacefluxmassmatrixdict, key) && return surfacefluxmassmatrixdict[key]
+  haskey(surfacefluxstiffnessmatrixdict, key) && return surfacefluxstiffnessmatrixdict[key]
   x = side == Low ? -1 : 1
   szi = Tuple(length(n) for n in nodesi)
   szj = Tuple(length(n) for n in nodesj)
@@ -244,17 +245,17 @@ function surfacefluxmassmatrix(nodesi::NDimNodes{1}, nodesj::NDimNodes{1}, dim::
   for (j, jj) in enumerate(CartesianIndices(szj)), (i, ii) in enumerate(CartesianIndices(szi))
     output[i, j] = lagrange(x, nodesi[1], i) * lagrange(x, nodesj[1], j)
   end
-  surfacefluxmassmatrixdict[key] = output
+  surfacefluxstiffnessmatrixdict[key] = output
   return output
 end
 
-function surfacefluxmassmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::Int64, side::FaceDirection)
+function surfacefluxstiffnessmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::Int64, side::FaceDirection)
   N = ndims(nodesi)
   @assert 0 < dim <= N
   @assert N == ndims(nodesj)
 
   key = mapreduce(hash, hash, (nodesi, nodesj, dim, side))
-  haskey(surfacefluxmassmatrixdict, key) && return surfacefluxmassmatrixdict[key]
+  haskey(surfacefluxstiffnessmatrixdict, key) && return surfacefluxstiffnessmatrixdict[key]
 
   szi = Tuple(length(n) for n in nodesi)
   szj = Tuple(length(n) for n in nodesj)
@@ -267,43 +268,57 @@ function surfacefluxmassmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::Int64,
         x = side == Low ? -1.0 : 1.0
         output[i,j] *= kernel(x)
       else
-        output[i,j] *= quadgk(kernel, -1, 1, rtol=eps())[1]
+        output[i,j] *= quadgk(kernel, -1, 1, atol=10eps(), rtol=eps())[1]
       end
     end
   end
-  surfacefluxmassmatrixdict[key] = output
+  surfacefluxstiffnessmatrixdict[key] = output
   return output
 end
 
 
-const volumefluxmassmatrixdict = Dict{UInt64, Any}()
+const volumefluxstiffnessmatrixdict = Dict{UInt64, Any}()
 
-function volumefluxmassmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::Int)
+function volumefluxstiffnessmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::Int)
   N = ndims(nodesi)
   @assert 0 < dim <= ndims(nodesi)
   @assert N == ndims(nodesj)
 
   key = mapreduce(hash, hash, (nodesi, nodesj, dim))
-  haskey(volumefluxmassmatrixdict, key) && return volumefluxmassmatrixdict[key]
+  haskey(volumefluxstiffnessmatrixdict, key) && return volumefluxstiffnessmatrixdict[key]
 
   output = ones(length(nodesi), length(nodesj))
   szi = Tuple(length(n) for n in nodesi)
   szj = Tuple(length(n) for n in nodesj)
   output = ones(prod(szi), prod(szj))
-  #quad = quadrature(Val(N))
-  for d in 1:N
-    for (j, jj) in enumerate(CartesianIndices(szj)), (i, ii) in enumerate(CartesianIndices(szi))
-      indi, indj = Tuple(ii)[d], Tuple(jj)[d]
-      if d == dim
-        output[i, j] *= QuadGK.quadgk(y->lagrange(y, nodesi[d], indi) * lagrangederiv(y, nodesj[d], indj), -1, 1)[1]
-      else
-        output[i, j] *= QuadGK.quadgk(y->lagrange(y, nodesi[d], indi) * lagrange(y, nodesj[d], indj), -1, 1)[1]
-      end
+  for (j, jj) in enumerate(CartesianIndices(szj)), (i, ii) in enumerate(CartesianIndices(szi))
+    tupleii, tuplejj = Tuple(ii), Tuple(jj)
+    for d in 1:N
+      indi, indj = tupleii[d], tuplejj[d]
+      output[i,j] *= _volumefluxstiffnessmatrix(nodesi[d], nodesj[d], indi, indj, d == dim)
     end
   end
-  volumefluxmassmatrixdict[key] = output
+  volumefluxstiffnessmatrixdict[key] = output
   return output
 end
+
+
+const _volumefluxstiffnessmatrixdict = Dict{UInt64, Any}()
+function _volumefluxstiffnessmatrix(nodesi::AbstractLagrangeNodes, nodesj::AbstractLagrangeNodes, indi, indj, deriv::Bool)
+
+  key = mapreduce(hash, hash, (nodesi, nodesj, indi, indj, deriv))
+  haskey(_volumefluxstiffnessmatrixdict, key) && return _volumefluxstiffnessmatrixdict[key]
+
+  output = (if deriv
+    QuadGK.quadgk(y->lagrange(y, nodesi, indi) * lagrangederiv(y, nodesj, indj), -1, 1)[1]
+  else
+    QuadGK.quadgk(y->lagrange(y, nodesi, indi) * lagrange(y, nodesj, indj), -1, 1)[1]
+  end)
+
+  _volumefluxstiffnessmatrixdict[key] = output
+  return output
+end
+
 
 
 function convertbases!(dofsto, dofsfrom, nodesfrom, nodesto, a=_a(nodesfrom), b=_b(nodesfrom))

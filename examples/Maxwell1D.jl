@@ -1,13 +1,13 @@
-using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays
+using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra
 
-const NX = 16;
+const NX = 32;
 
-const OX = 5;
+const OX = 2;
 
-const state2D = State([OX], LegendreNodes);
+const state2D = State([OX], LobattoNodes);
 
 const DIMS = 1
-const L = 1
+const L = 10.0
 
 const a = zeros(DIMS);
 const b = ones(DIMS) .* L;
@@ -18,7 +18,7 @@ gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
 const grid2D = Grid([Cell(deepcopy(state2D), gridposition((i-1)/NX), gridposition(i/NX)) for i in 1:NX]);
 
 const s0 = DGMaxwellPIC.speedoflight
-const k = 4 * pi
+const k = 4 * pi / L
 const ω = s0 * k
 
 fBz(x, t=0) = sin(x[1] * k - ω  * t)
@@ -26,22 +26,35 @@ fEy(x, t=0) = s0 * fBz(x, t)
 
 electricfield!(grid2D, fEy, 2);
 magneticfield!(grid2D, fBz, 3);
-
-const A = assemble(grid2D, upwind=0.0);
-const S = sources(grid2D);
-const u = dofs(grid2D);
+#DGMaxwellPIC.electricfielddofs!(grid2D, s0, 2);
+#DGMaxwellPIC.magneticfielddofs!(grid2D, 1.0, 3);
 
 const dtc = minimum((b .- a)./NX./OX) / s0
-const dt = dtc * 0.05
+const dt = dtc * 0.2
+
+# du/dt = A * u
+# u1 - u0 = dt * (A * u)
+# u1 - u0 = dt * (A * (u1 + u0)/2)
+# u1 = u0 + dt/2 * A * u1 + dt/2 * A * u0
+# (1 - dt/2 * A)*u1 = (1 + dt/2 * A) * u0
+# u1 = (1 - dt/2 * A)^-1 (1 + dt/2 * A) * u0
+
+#const C = assemble(grid2D, upwind=0.0) * dt / 2;
+#const B = lu(I - C);
+#const A = B \ Matrix(I + C);
+const A = I + assemble(grid2D, upwind=0.0) * dt;
+const S = sources(grid2D);
+const u = dofs(grid2D);
 
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 
-const nturns = 0.1
-const NI = Int(ceil(nturns * L / s0 / dt))
+const distance = 0.5 * L
+const NI = Int(ceil(distance / s0 / dt))
 
 @gif for i in 1:NI
-  @timeit to "u .+=" u .+= A * u .* dt
+  #@timeit to "u .=" u .= A * u
+  @timeit to "u .=" u .= A * u
   @timeit to "dofs!" dofs!(grid2D, u)
   t = i * dt
   p1 = plot(x, electricfield(grid2D, 1), ylims=[-s0,s0]); title!("$i of $NI")

@@ -11,7 +11,7 @@ function jacobian(c::Cell{N}; ignore=0) where N
   output = 1.0
   for i in 1:N
     i == ignore && continue
-    output *= (c.upper[i] - c.lower[i]) / 2
+    output *= (c.upper[i] - c.lower[i]) / 2 # factor of 1/2 to convert from reference cell [-1,1]
   end
   return output
 end
@@ -22,7 +22,7 @@ currentdofs(c::Cell) = vcat(((@view c.state.q[i][:]) for i in 7:9)...) # TODO th
 chargedofs(c::Cell) = @view c.state.q[10]
 workdofs(c::Cell) = @view c.state.q[11]
 referencex(c::Cell, x) = (x .- c.lower) ./ (c.upper .- c.lower) .* 2 .- 1
-originalx(c::Cell, x) = (x .+ 1) ./2 .* (c.upper .- c.lower) .- c.lower
+originalx(c::Cell, x) = (x .+ 1) ./2 .* (c.upper .- c.lower) .+ c.lower
 boundingbox(c::Cell) = (c.lower, c.upper)
 lower(c::Cell) = c.lower
 upper(c::Cell) = c.upper

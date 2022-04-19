@@ -18,10 +18,11 @@ using SparseArrays
 using SpecialPolynomials
 using StaticArrays
 
-const speedoflight = 10.0
+const speedoflight = 100.0
 const epsilon0 = 1.0
 
 @enum FaceDirection High Low
+opposite(side::FaceDirection) = side == High ? Low : High
 
 include("Lagrange.jl")
 include("States.jl")

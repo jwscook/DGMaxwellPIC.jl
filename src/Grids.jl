@@ -115,7 +115,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     sizetuple = size(dofs)
     nodes = NDimNodes(sizetuple, NodeType)
     fill!(dofs, 0) # zero out before use
-    lagrange!(dofs, nodes, f) * jacobian(c)
+    lagrange!(dofs, nodes, x->f(originalx(c, x)))
     $(fnamedofs!)(state(c), dofs, component) # are dofs a reference, so is this even needed?
   end
   @eval function $(fname!)(c::Cell, f::F) where {F<:Function}
@@ -150,6 +150,12 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     isnothing(c) || $(fname!)(state(c), referencex(c, x), args[2:end]...)
   end
 
+  @eval function $(fnamedofs!)(g::Grid{N}, data, component) where {N}
+    for i in eachindex(g)
+      $(fnamedofs!)(state(g[i]), data, component)
+    end
+  end
+
   @eval function $(fname!)(g::Grid{N}, cellids::Vector{<:Integer}, x::AbstractArray{<:Number, 2},
        args...) where {N}
     # this is the fast version that processes batches of particle that are sorted into cells
@@ -163,13 +169,6 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
       cell = g[i]
       $(fname!)(cell, (@view x[:, i1:i2]), args...) # bugfest args!?!
     end
-#    while i2 < length(cellids) # TODO turn this into a for loop and parallelise
-#      i1 = i2 + 1
-#      cellid = cellids[i1]
-#      i2 = findlast(x->isequal(x, cellid), cellids)
-#      cell = g[cellid]
-#      $(fname!)(cell, (@view x[:, i1:i2]), args...) # bugfest args!?!
-#    end
   end
 
   @eval function $(fname!)(g::Grid, f::F, component::Integer) where {F<:Function}
