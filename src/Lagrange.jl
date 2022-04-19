@@ -162,7 +162,6 @@ function lagrange!(dofs, nodes::NDimNodes, f::F, a=_a(nodes), b=_b(nodes),
     solvedofsornot::MaybeSolveDofs=SolveDofsNow()) where {F<:Function}
   quad = quadrature(nodes)
   @assert size(dofs) == Tuple(length(n) for n in nodes)
-  fill!(dofs, 0)
   for i in CartesianIndices(dofs)
     t = Tuple(i)
     dofs[i] = quad(x->f(x) * lagrange(x, nodes, t, 1), a, b, atol=10eps(), rtol=sqrt(eps()))[1]
