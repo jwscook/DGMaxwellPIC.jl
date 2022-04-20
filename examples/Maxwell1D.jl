@@ -4,7 +4,7 @@ const NX = 32;
 
 const OX = 2;
 
-const state2D = State([OX], LobattoNodes);
+const state2D = State([OX], LegendreNodes);
 
 const DIMS = 1
 const L = 10.0
@@ -18,10 +18,11 @@ gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
 const grid2D = Grid([Cell(deepcopy(state2D), gridposition((i-1)/NX), gridposition(i/NX)) for i in 1:NX]);
 
 const s0 = DGMaxwellPIC.speedoflight
-const k = 4 * pi / L
+const k0 = 2 * pi / L
+const k = 3 * k0
 const ω = s0 * k
 
-fBz(x, t=0) = sin(x[1] * k - ω  * t)
+fBz(x, t=0) = sin(x[1] * k - ω * t)
 fEy(x, t=0) = s0 * fBz(x, t)
 
 electricfield!(grid2D, fEy, 2);
@@ -39,10 +40,10 @@ const dt = dtc * 0.2
 # (1 - dt/2 * A)*u1 = (1 + dt/2 * A) * u0
 # u1 = (1 - dt/2 * A)^-1 (1 + dt/2 * A) * u0
 
-#const C = assemble(grid2D, upwind=0.0) * dt / 2;
-#const B = lu(I - C);
-#const A = B \ Matrix(I + C);
-const A = I + assemble(grid2D, upwind=0.0) * dt;
+const C = assemble(grid2D, upwind=0.0) * dt / 2;
+const B = lu(I - C);
+const A = B \ Matrix(I + C);
+#const A = I + assemble(grid2D, upwind=0.0) * dt;
 const S = sources(grid2D);
 const u = dofs(grid2D);
 

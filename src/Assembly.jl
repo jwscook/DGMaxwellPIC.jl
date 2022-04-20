@@ -16,6 +16,7 @@ upwindfluxmatrix(::Val{3}, x) = _fluxmatrix((@SArray [1 0 0; 0 1 0; 0 0 0]), x)
 #@memoize upwindfluxmatrix(::Val{T}, n::Integer) where {T} = fluxmatrix(Val(T), I(n))
 #upwindfluxmatrix(s::State{N}, a) where N = sum(upwindfluxmatrix(Val(i), a) for i in 1:N)
 
+# positive curl / levi-civita
 fluxmatrix(::Val{1}, x) = _fluxmatrix((@SArray [0 0 0; 0 0 1; 0 -1 0]), x)
 fluxmatrix(::Val{2}, x) = _fluxmatrix((@SArray [0 0 -1; 0 0 0; 1 0 0]), x)
 fluxmatrix(::Val{3}, x) = _fluxmatrix((@SArray [0 1 0; -1 0 0; 0 0 0]), x)
@@ -56,7 +57,7 @@ function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
       flux = surfacefluxstiffnessmatrix(cell, nodes, dim, side, upwind)
       @views output[celldofindices, celldofindices] .-= flux .* factor
 
-      neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, opposite(side))
+      neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
       neighbourcell = g[neighbourcellgridindex...]
       flux = surfacefluxstiffnessmatrix(neighbourcell, nodes, dim, opposite(side), upwind)
       neighbourdofindices = indices(g, neighbourcellgridindex)
@@ -90,7 +91,7 @@ function assembler(g::Grid{N,T}, f::F) where {N,T, F}
   for i in CartesianIndices(g.data)
     cellindices = indices(g, Tuple(i))
     nodes = NDimNodes(dofshape(g[i]), T)
-    @views output[cellindices, cellindices] .= f(g[i], nodes)
+    @views output[cellindices, cellindices] .+= f(g[i], nodes)
   end
   return output 
 end

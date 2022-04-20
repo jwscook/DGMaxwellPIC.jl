@@ -3,12 +3,12 @@ using DGMaxwellPIC, FastGaussQuadrature, ForwardDiff, Polynomials, SpecialPolyno
 import DGMaxwellPIC: lagrange, lagrangederiv
 
 @testset "Grids" begin
-  for (order, rtol) in ((5, 1e-1), (25, 1e-3)), NodeType in (LobattoNodes, LegendreNodes)
+  for (order, rtol) in ((5, 1e-1), (15, 1e-2)), NodeType in (LobattoNodes, LegendreNodes)
     _state = State([order for _ in 1:1], NodeType);
     NX = 2^rand(6:10)
-    L = rand()
-    a = zeros(1)
-    b = ones(1) .* L
+    a = rand(1)
+    b = a .+ abs.(randn(1)) * 10
+    L = b[1] - a[1]
     gridposition(x) = x .* (b .- a) .+ a
     _grid = Grid([Cell(deepcopy(_state), gridposition((i-1)/NX), gridposition(i/NX)) for i in 1:NX]);
     k = 4 * pi / L

@@ -120,7 +120,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
   end
   @eval function $(fname!)(c::Cell, f::F) where {F<:Function}
     for component in 1:$len
-      $(fname!)(c, x->f(x)[component], component)
+      $(fname!)(c, x->f(originalx(c, x))[component], component)
     end
   end
 
@@ -173,13 +173,13 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
 
   @eval function $(fname!)(g::Grid, f::F, component::Integer) where {F<:Function}
     for c in g
-      $(fname!)(c, x->f(originalx(c, x)), component)
+      $(fname!)(c, f, component)
     end
   end
 
   @eval function $(fname!)(g::Grid, f::F) where {F<:Function}
     for component in 1:$len, c in g
-      $(fname!)(c, x->f(originalx(c, x))[component], component)
+      $(fname!)(c, x->f(x)[component], component)
     end
   end
 
@@ -242,10 +242,6 @@ end
 divB(g::Grid, x) = divergence(g, x, magneticfield)
 divE(g::Grid, x) = divergence(g, x, electricfield)
 
-function sources(g::Grid)
-  A = volumemassmatrix(g)
-  x = currentsource(g)
-  return A * x
-end
+sources(g::Grid) = -speedoflight^2 * mu0 * currentsource(g)
 
 
