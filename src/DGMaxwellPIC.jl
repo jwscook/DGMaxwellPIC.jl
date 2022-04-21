@@ -18,7 +18,7 @@ using SparseArrays
 using SpecialPolynomials
 using StaticArrays
 
-const speedoflight = 1.0
+const speedoflight = 10.0
 const epsilon0 = 1.0
 const mu0 = 1.0
 

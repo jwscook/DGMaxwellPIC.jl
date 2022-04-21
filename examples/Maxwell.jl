@@ -1,4 +1,4 @@
-using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays
+using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra
 
 const NX = 32;
 const NY = 16;
@@ -20,12 +20,15 @@ const grid2D = Grid([Cell(deepcopy(state2D), gridposition(((i-1)/NX, (j-1)/NY)),
 
 magneticfield!(grid2D, x->exp(-(sum(x-(b+a)/2)).^2 * 10), 3);
 
-const A = assemble(grid2D);
-const S = sources(grid2D);
-const u = dofs(grid2D);
-
 const dtc = minimum((b .- a)./(NX, NY)./(OX, OY)) / DGMaxwellPIC.speedoflight
 const dt = dtc * 0.5
+
+const C = assemble(grid2D, upwind=0.0) * dt / 2;
+const B = lu(I - C);
+const A = B \ Matrix(I + C);
+
+const S = sources(grid2D);
+const u = dofs(grid2D);
 
 
 const to = TimerOutput()

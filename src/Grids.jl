@@ -10,12 +10,14 @@ end
 Base.getindex(g::Grid, i...) = g.data[i...]
 Base.size(g::Grid) = size(g.data)
 Base.length(g::Grid) = length(g.data)
+numelements(g::Grid) = length(g.data)
 Base.eachindex(g::Grid) = eachindex(g.data)
 Base.iterate(g::Grid) = iterate(g.data)
 Base.iterate(g::Grid, state) = iterate(g.data, state)
 lower(g::Grid) = g.lower
 upper(g::Grid) = g.upper
 boundingbox(g::Grid) = (lower(g), upper(g))
+volume(g::Grid) = prod(upper(g) .- lower(g))
 zero!(g::Grid) = zero!.(g.data)
 
 for (fname, offset, len) ∈ ((:electricfield, 0, 3),

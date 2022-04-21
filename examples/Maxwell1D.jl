@@ -2,12 +2,13 @@ using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra
 
 const NX = 32;
 
-const OX = 2;
+const OX = 3;
 
 const state2D = State([OX], LobattoNodes);
+#const state2D = State([OX], LegendreNodes);
 
 const DIMS = 1
-const L = 10.0
+const L = pi #rand() * 10.0
 
 const a = zeros(DIMS);
 const b = ones(DIMS) .* L;
@@ -21,7 +22,7 @@ const s0 = DGMaxwellPIC.speedoflight
 const k = 4pi / L
 const ω = s0 * k
 
-fBz(x, t=0) = sin(x[1] * k - ω * t)
+fBz(x, t=0) = sin(k * x[1] - ω * t)
 fEy(x, t=0) = s0 * fBz(x, t)
 
 electricfield!(grid2D, fEy, 2);
@@ -30,7 +31,7 @@ magneticfield!(grid2D, fBz, 3);
 #DGMaxwellPIC.magneticfielddofs!(grid2D, 1.0, 3);
 
 const dtc = minimum((b .- a)./NX./OX) / s0
-const dt = dtc * 0.2
+const dt = dtc * 0.95
 
 # du/dt = A * u
 # u1 - u0 = dt * (A * u)
@@ -49,22 +50,22 @@ const u = dofs(grid2D);
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 
-const distance = 2 * L
-const NI = Int(ceil(distance / s0 / dt))
+const nturns = 1
+const NI = Int(ceil(nturns * L/ s0 / dt))
 
 @gif for i in 1:NI
   #@timeit to "u .=" u .= A * u
   @timeit to "u .=" u .= A * u
   @timeit to "dofs!" dofs!(grid2D, u)
   t = i * dt
-  p1 = plot(x, electricfield(grid2D, 1))#, ylims=[-s0,s0]); title!("$i of $NI")
-  p2 = plot(x, electricfield(grid2D, 2))#, ylims=[-s0,s0])
-  p3 = plot(x, electricfield(grid2D, 3))#, ylims=[-s0,s0])
-  p4 = plot(x, magneticfield(grid2D, 1))#, ylims=[-1,1])
-  p5 = plot(x, magneticfield(grid2D, 2))#, ylims=[-1,1])
-  p6 = plot(x, magneticfield(grid2D, 3))#, ylims=[-1,1])
-  plot!(p2, x, [fEy([xi], t) for xi in x])#, ylims=[-s0,s0])
-  plot!(p6, x, [fBz([xi], t) for xi in x])#, ylims=[-1,1])
+  p1 = plot(x, electricfield(grid2D, 1), ylims=[-s0,s0]); title!("$i of $NI")
+  p2 = plot(x, electricfield(grid2D, 2), ylims=[-s0,s0])
+  p3 = plot(x, electricfield(grid2D, 3), ylims=[-s0,s0])
+  p4 = plot(x, magneticfield(grid2D, 1), ylims=[-1,1])
+  p5 = plot(x, magneticfield(grid2D, 2), ylims=[-1,1])
+  p6 = plot(x, magneticfield(grid2D, 3), ylims=[-1,1])
+  plot!(p2, x, [fEy([xi], t) for xi in x], ylims=[-s0,s0])
+  plot!(p6, x, [fBz([xi], t) for xi in x], ylims=[-1,1])
   plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   @show i, i * dt * s0
 end every 1
