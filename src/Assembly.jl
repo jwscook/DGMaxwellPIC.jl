@@ -76,7 +76,7 @@ function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
   ns = ndofs(cell)
   output = spzeros(ns, ns)
   nc = ndofs(cell, 1) # number of dofs per component
-  lumm = lumassmatrix(nodes)
+  lumm = lu(massmatrix(nodes) * jacobian(cell))
   for dim in 1:N
     fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell)
     ldiv!(lumm, fmm)
@@ -103,9 +103,8 @@ function assembler(g::Grid{N,T}, f::F) where {N,T, F}
 end
 
 function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
-  #return Matrix(volumemassmatrix(g)) \ (volumefluxstiffnessmatrix(g) .+ surfacefluxstiffnessmatrix(g, upwind))
-  @show volume(g), numelements(g)
-  return (volumefluxstiffnessmatrix(g) + surfacefluxstiffnessmatrix(g, upwind))
+  correctionfactor = numelements(g) / volume(g) * 2
+  return correctionfactor .* (volumefluxstiffnessmatrix(g) + surfacefluxstiffnessmatrix(g, upwind))
 end
 
 

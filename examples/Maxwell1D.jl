@@ -8,7 +8,7 @@ const state2D = State([OX], LobattoNodes);
 #const state2D = State([OX], LegendreNodes);
 
 const DIMS = 1
-const L = pi #rand() * 10.0
+const L = sqrt(2) * 10 #rand() * 10.0
 
 const a = zeros(DIMS);
 const b = ones(DIMS) .* L;
