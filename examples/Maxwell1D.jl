@@ -49,7 +49,7 @@ const u = dofs(grid2D);
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 
-const distance = 0.5 * L
+const distance = 2 * L
 const NI = Int(ceil(distance / s0 / dt))
 
 @gif for i in 1:NI
