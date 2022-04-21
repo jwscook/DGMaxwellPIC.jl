@@ -10,8 +10,11 @@ dofshape(c::Cell) = dofshape(c.state)
 function jacobian(c::Cell{N}; ignore=0) where N
   output = 1.0
   for i in 1:N
-    i == ignore && continue
-    output *= (c.upper[i] - c.lower[i]) / 2 # factor of 1/2 to convert from reference cell [-1,1]
+    if i == ignore
+      output /= 2 # I cannot justify this
+    else
+      output *= (c.upper[i] - c.lower[i]) / 2 # factor of 1/2 to convert from reference cell [-1,1]
+    end
   end
   return output
 end
@@ -30,4 +33,4 @@ centre(c::Cell) = (lower(c) .+ upper(c)) ./ 2
 dofs!(c::Cell, x) = dofs!(state(c), x)
 zero!(c::Cell) = zero!(c.state)
 
-
+massmatrix(c::Cell{N,T}) where {N,T} = massmatrix(NDimNodes(dofshape(c), T)) * jacobian(c)

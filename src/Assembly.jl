@@ -34,8 +34,8 @@ function surfacefluxstiffnessmatrix!(output, cell::Cell, nodes::NDimNodes, dim, 
   sfmm = surfacefluxstiffnessmatrix(nodes, nodes, dim, side) * jacobian(cell; ignore=dim)
   @assert size(sfmm) == (nc, nc) "$(size(sfmm)) != ($nc, $nc)"
   fm = fluxmatrix(Val(dim), sfmm)
-  @views output[1:3nc, 3nc+1:6nc] .+= fm .* speedoflight^2
-  @views output[3nc+1:6nc, 1:3nc] .-= fm
+  @views output[1:3nc, 3nc+1:6nc] .-= fm .* speedoflight^2
+  @views output[3nc+1:6nc, 1:3nc] .+= fm
   if !iszero(upwind)
     ufm = upwindfluxmatrix(Val(dim), sfmm) * upwind * jacobian(cell; ignore=dim)
     @views output[1:3nc, 1:3nc] .+= ufm .* epsilon0
@@ -61,7 +61,10 @@ function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
       neighbourcell = g[neighbourcellgridindex...]
       flux = surfacefluxstiffnessmatrix(neighbourcell, nodes, dim, opposite(side), upwind)
       neighbourdofindices = indices(g, neighbourcellgridindex)
-      @views output[celldofindices, neighbourdofindices] .+= flux .* factor
+      #@views output[celldofindices, neighbourdofindices] .-= kron(I(6), massmatrix(cell)) \ flux .* factor
+      #@show dim, side, cartindex
+      #@show flux
+      @views output[celldofindices, neighbourdofindices] .-= flux' .* factor
     end
   end
   return output
@@ -75,8 +78,8 @@ function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
   for dim in 1:N
     fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell)
     fm = fluxmatrix(Val(dim), fmm)
-    @views output[1:3nc, 3nc+1:6nc] .+= fm .* speedoflight^2
-    @views output[3nc+1:6nc, 1:3nc] .-= fm
+    @views output[1:3nc, 3nc+1:6nc] .-= fm .* speedoflight^2
+    @views output[3nc+1:6nc, 1:3nc] .+= fm
   end
   return output
 end

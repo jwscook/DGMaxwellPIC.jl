@@ -4,7 +4,7 @@ const NX = 32;
 
 const OX = 2;
 
-const state2D = State([OX], LegendreNodes);
+const state2D = State([OX], LobattoNodes);
 
 const DIMS = 1
 const L = 10.0
@@ -18,8 +18,7 @@ gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
 const grid2D = Grid([Cell(deepcopy(state2D), gridposition((i-1)/NX), gridposition(i/NX)) for i in 1:NX]);
 
 const s0 = DGMaxwellPIC.speedoflight
-const k0 = 2 * pi / L
-const k = 3 * k0
+const k = 4pi / L
 const ω = s0 * k
 
 fBz(x, t=0) = sin(x[1] * k - ω * t)
@@ -58,14 +57,14 @@ const NI = Int(ceil(distance / s0 / dt))
   @timeit to "u .=" u .= A * u
   @timeit to "dofs!" dofs!(grid2D, u)
   t = i * dt
-  p1 = plot(x, electricfield(grid2D, 1), ylims=[-s0,s0]); title!("$i of $NI")
-  p2 = plot(x, electricfield(grid2D, 2), ylims=[-s0,s0])
-  plot!(p2, x, [fEy([xi], t) for xi in x], ylims=[-s0,s0])
-  p3 = plot(x, electricfield(grid2D, 3), ylims=[-s0,s0])
-  p4 = plot(x, magneticfield(grid2D, 1), ylims=[-1,1])
-  p5 = plot(x, magneticfield(grid2D, 2), ylims=[-1,1])
-  p6 = plot(x, magneticfield(grid2D, 3), ylims=[-1,1])
-  plot!(p6, x, [fBz([xi], t) for xi in x], ylims=[-1,1])
+  p1 = plot(x, electricfield(grid2D, 1))#, ylims=[-s0,s0]); title!("$i of $NI")
+  p2 = plot(x, electricfield(grid2D, 2))#, ylims=[-s0,s0])
+  p3 = plot(x, electricfield(grid2D, 3))#, ylims=[-s0,s0])
+  p4 = plot(x, magneticfield(grid2D, 1))#, ylims=[-1,1])
+  p5 = plot(x, magneticfield(grid2D, 2))#, ylims=[-1,1])
+  p6 = plot(x, magneticfield(grid2D, 3))#, ylims=[-1,1])
+  plot!(p2, x, [fEy([xi], t) for xi in x])#, ylims=[-s0,s0])
+  plot!(p6, x, [fBz([xi], t) for xi in x])#, ylims=[-1,1])
   plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   @show i, i * dt * s0
 end every 1

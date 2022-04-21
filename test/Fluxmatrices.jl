@@ -16,24 +16,29 @@ import DGMaxwellPIC: lagrange, volumemassmatrix, massmatrix, NDimNodes, surfacef
       Bz = map(i -> (@variables Bz($i))[1], 1:OX)
       vec = vcat(Ex, Ey, Ez, Bx, By, Bz)
 
-
       for NodeType in (LegendreNodes, LobattoNodes)
         nodes = NDimNodes(Tuple(OX for _ in 1:DIMS), NodeType)
         state1D = State(OX .* ones(Int64, DIMS), NodeType)
         cell = Cell(state1D, -ones(DIMS), ones(DIMS)) # in reference cell
-        sfmm = surfacefluxstiffnessmatrix(cell, nodes, 1, Low)
-        @test length(vec) == size(sfmm, 2)
+        sfmm1 = surfacefluxstiffnessmatrix(cell, nodes, 1, Low)
+        @test length(vec) == size(sfmm1, 2)
         @show DIMS, OX, NodeType, Low
-        #display("text/plain", Matrix(sfmm))
-        o = trunc.(sfmm, digits=5) * vec
+        #display("text/plain", Matrix(sfmm1))
+        o = trunc.(sfmm1, digits=5) * vec
         for i in eachindex(o)
           @show i, vec[i], o[i]
         end
-        sfmm = surfacefluxstiffnessmatrix(cell, nodes, 1, High)
-        @test length(vec) == size(sfmm, 2)
+        sfmm2 = surfacefluxstiffnessmatrix(cell, nodes, 1, High)
+        @test length(vec) == size(sfmm2, 2)
         @show DIMS, OX, NodeType, High
-        #display("text/plain", Matrix(sfmm))
-        o = trunc.(sfmm, digits=5) * vec
+        #display("text/plain", Matrix(sfmm2))
+        o = trunc.(sfmm2, digits=5) * vec
+        for i in eachindex(o)
+          @show i, vec[i], o[i]
+        end
+        @show DIMS, OX, NodeType
+        #display("text/plain", Matrix(sfmm2))
+        o = trunc.(sfmm1 .+ sfmm2, digits=5) * vec
         for i in eachindex(o)
           @show i, vec[i], o[i]
         end
@@ -42,40 +47,40 @@ import DGMaxwellPIC: lagrange, volumemassmatrix, massmatrix, NDimNodes, surfacef
 
   end
 
-  @testset "2D" begin
-    DIMS = 2
-    for OX in (2, 3), OY in (2:3)
-
-      Ex = map(j -> (i = Tuple(j); @variables Ex($i))[1], CartesianIndices((OX, OY)))
-      Ey = map(j -> (i = Tuple(j); @variables Ey($i))[1], CartesianIndices((OX, OY)))
-      Ez = map(j -> (i = Tuple(j); @variables Ez($i))[1], CartesianIndices((OX, OY)))
-      Bx = map(j -> (i = Tuple(j); @variables Bx($i))[1], CartesianIndices((OX, OY)))
-      By = map(j -> (i = Tuple(j); @variables By($i))[1], CartesianIndices((OX, OY)))
-      Bz = map(j -> (i = Tuple(j); @variables Bz($i))[1], CartesianIndices((OX, OY)))
-      vec = vcat(Ex[:], Ey[:], Ez[:], Bx[:], By[:], Bz[:])
-
-      for NodeType in (LegendreNodes, LobattoNodes)
-        nodes = NDimNodes((OX, OY), NodeType)
-        state1D = State([OX, OY], NodeType)
-        cell = Cell(state1D, -ones(DIMS), ones(DIMS)) # in reference cell
-        sfmm = surfacefluxstiffnessmatrix(cell, nodes, 1, Low)
-        @test length(vec) == size(sfmm, 2)
-        @show DIMS, OX, NodeType, Low
-        #display("text/plain", Matrix(sfmm))
-        o = trunc.(sfmm, digits=5) * vec
-        for i in eachindex(o)
-          @show i, vec[i], o[i]
-        end
-        sfmm = surfacefluxstiffnessmatrix(cell, nodes, 1, High)
-        @test length(vec) == size(sfmm, 2)
-        @show DIMS, OX, NodeType, High
-        #display("text/plain", Matrix(sfmm))
-        o = trunc.(sfmm, digits=5) * vec
-        for i in eachindex(o)
-          @show i, vec[i], o[i]
-        end
-      end
-    end
+#  @testset "2D" begin
+#    DIMS = 2
+#    for OX in (2, 3), OY in (2:3)
+#
+#      Ex = map(j -> (i = Tuple(j); @variables Ex($i))[1], CartesianIndices((OX, OY)))
+#      Ey = map(j -> (i = Tuple(j); @variables Ey($i))[1], CartesianIndices((OX, OY)))
+#      Ez = map(j -> (i = Tuple(j); @variables Ez($i))[1], CartesianIndices((OX, OY)))
+#      Bx = map(j -> (i = Tuple(j); @variables Bx($i))[1], CartesianIndices((OX, OY)))
+#      By = map(j -> (i = Tuple(j); @variables By($i))[1], CartesianIndices((OX, OY)))
+#      Bz = map(j -> (i = Tuple(j); @variables Bz($i))[1], CartesianIndices((OX, OY)))
+#      vec = vcat(Ex[:], Ey[:], Ez[:], Bx[:], By[:], Bz[:])
+#
+#      for NodeType in (LegendreNodes, LobattoNodes)
+#        nodes = NDimNodes((OX, OY), NodeType)
+#        state1D = State([OX, OY], NodeType)
+#        cell = Cell(state1D, -ones(DIMS), ones(DIMS)) # in reference cell
+#        sfmm = surfacefluxstiffnessmatrix(cell, nodes, 1, Low)
+#        @test length(vec) == size(sfmm, 2)
+#        @show DIMS, OX, NodeType, Low
+#        #display("text/plain", Matrix(sfmm))
+#        o = trunc.(sfmm, digits=5) * vec
+#        for i in eachindex(o)
+#          @show i, vec[i], o[i]
+#        end
+#        sfmm = surfacefluxstiffnessmatrix(cell, nodes, 1, High)
+#        @test length(vec) == size(sfmm, 2)
+#        @show DIMS, OX, NodeType, High
+#        #display("text/plain", Matrix(sfmm))
+#        o = trunc.(sfmm, digits=5) * vec
+#        for i in eachindex(o)
+#          @show i, vec[i], o[i]
+#        end
+#      end
+#    end
 
   end
 
