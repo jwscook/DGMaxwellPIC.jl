@@ -48,7 +48,6 @@ end
 function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
   output = spzeros(ndofs(g),ndofs(g))
   for cartindex in CartesianIndices(g.data)
-    @time begin
     cellindex = Tuple(cartindex)
     cell = g[cartindex]
     nodes = NDimNodes(dofshape(cell), T)
@@ -67,7 +66,6 @@ function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
       @views output[celldofindices, neighbourdofindices] .+= flux .* factor
     end
     @views output[celldofindices, celldofindices] .= lumm \ output[celldofindices, celldofindices]
-    end # @time
   end
   return output
 end

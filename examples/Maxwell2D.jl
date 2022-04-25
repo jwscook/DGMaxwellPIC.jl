@@ -1,10 +1,10 @@
 using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra
 
 const NX = 32;
-const NY = 16;
+const NY = 4;
 
-const OX = 3;
-const OY = 5;
+const OX = 2;
+const OY = 2;
 
 const state2D = State([OX, OY], LegendreNodes);
 
@@ -18,22 +18,36 @@ gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
 
 const grid2D = Grid([Cell(deepcopy(state2D), gridposition(((i-1)/NX, (j-1)/NY)), gridposition((i/NX, j/NY))) for i in 1:NX, j in 1:NY]);
 
-magneticfield!(grid2D, x->exp(-(sum(x-(b+a)/2)).^2 * 10), 3);
+#magneticfield!(grid2D, x->exp(-(sum(x-(b+a)/2)).^2 * 10), 3);
+
+const s0 = DGMaxwellPIC.speedoflight
+const k = 4pi / (b[1] - a[1])
+const ω = s0 * k
+
+fBz(x, t=0) = sin(k * x[1] - ω * t)
+fEy(x, t=0) = s0 * fBz(x, t)
+
+electricfield!(grid2D, fEy, 2);
+magneticfield!(grid2D, fBz, 3);
+
 
 const dtc = minimum((b .- a)./(NX, NY)./(OX, OY)) / DGMaxwellPIC.speedoflight
 const dt = dtc * 0.5
 
-const C = assemble(grid2D, upwind=0.0) * dt / 2;
-const B = lu(I - C);
-const A = B \ Matrix(I + C);
-
+@show "Assembling"
+const M = assemble(grid2D, upwind=0.0) * dt / 2;
+@show size(M)
+@show "Building Crank-Nicolson"
+const A = (I - M) \ Matrix(I + M);
+@show "Calcuating sources"
 const S = sources(grid2D);
+@show "Fetching dofs vector"
 const u = dofs(grid2D);
 
 
 const to = TimerOutput()
-@gif for i in 1:1000
-  @timeit to "u .+=" u .+= A * u .* dt
+@gif for i in 1:10000
+  @timeit to "u .+=" u .+= A * u
   @timeit to "dofs!" dofs!(grid2D, u)
   p1 = heatmap(electricfield(grid2D, 1))
   p2 = heatmap(electricfield(grid2D, 2))
@@ -43,5 +57,5 @@ const to = TimerOutput()
   p6 = heatmap(magneticfield(grid2D, 3))
   plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   @show i
-end every 100
+end every 2
 show(to)
