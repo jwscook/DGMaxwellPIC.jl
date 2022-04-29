@@ -151,9 +151,6 @@ function lagrange!(dofs, xs::AbstractArray{<:Real, 2}, nodes::NDimNodes, value::
   maybesolvedofs!(dofs, nodes, solvedofsornot)
 end
 
-#quadrature(::Val{1}) = QuadGK.quadgk
-quadrature(::Val{N}) where N = HCubature.hcubature
-quadrature(n::NDimNodes) = quadrature(Val(ndims(n)))
 function lagrange!(dofs, nodes::NDimNodes, f::F,
     solvedofsornot::MaybeSolveDofs=SolveDofsNow()) where {F<:Function}
   a, b = _a(nodes), _b(nodes)
@@ -162,7 +159,7 @@ function lagrange!(dofs, nodes::NDimNodes, f::F,
     t = Tuple(i)
     dofs[i] = HCubature.hcubature(x->f(x) * lagrange(x, nodes, t, 1), a, b,
                                   atol=ATOL, rtol=sqrt(eps()))[1]
-#    dofs[i] *= dofs[i] > ATOL
+#    dofs[i] *= dofs[i] > 100ATOL
   end
   maybesolvedofs!(dofs, nodes, solvedofsornot)
 end
@@ -172,7 +169,7 @@ function massmatrix(nodesi::T, nodesj::U,
   for j in eachindex(nodesj), i in eachindex(nodesi)
     output[i, j] = QuadGK.quadgk(x->lagrange(x, nodesi, i, 1) * lagrange(x, nodesj, j, 1),
                                  -1, 1, atol=ATOL, rtol=RTOL)[1]
-#    output[i, j] *= output[i, j] > ATOL
+#    output[i, j] *= output[i, j] > 100ATOL
   end
   return output
 end
@@ -188,7 +185,6 @@ const massmatrixdictsdict = Dict{UInt64, Any}()
 function massmatrixdictionary(nodesi::NDimNodes, nodesj::NDimNodes)
   key = mapreduce(hash, hash, (nodesi, nodesj))
   haskey(massmatrixdictsdict, key) && return massmatrixdictsdict[key]
-#  throw(ErrorException("just show me the stack trace"))
   @info "Calling memoized massmatrixdictionary(...)"
   @assert length(nodesi) == length(nodesj)
   szi = Tuple(length(n) for n in nodesi)
@@ -262,7 +258,7 @@ function surfacefluxstiffnessmatrix(nodesi::NDimNodes, nodesj::NDimNodes, sidei:
       else
         kernel(x) = lagrange(x, nodesi[d], indi) * lagrange(x, nodesj[d], indj)
         integral = QuadGK.quadgk(kernel, -1, 1, atol=ATOL, rtol=RTOL)[1]
-#        integral *= integral > ATOL
+#        integral *= integral > 100ATOL
         output[i,j] *= integral
       end
     end
@@ -311,7 +307,7 @@ function _volumefluxstiffnessmatrix(nodesi::AbstractLagrangeNodes, nodesj::Abstr
     QuadGK.quadgk(y->lagrange(y, nodesi, indi) * lagrange(y, nodesj, indj),
                   -1, 1, atol=ATOL, rtol=RTOL)[1]
   end)
-#  output *= output > ATOL
+#  output *= output > 100ATOL
 
   _volumefluxstiffnessmatrixdict[key] = output
   return output

@@ -77,7 +77,7 @@ function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
   lumm = lu(kron(I(6), massmatrix(cell) * jacobian(cell)))
   for dim in 1:N
     fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell)
-    fm = Matrix(fluxmatrix(Val(dim), fmm))
+    fm = fluxmatrix(Val(dim), fmm)
     @views output[1:3nc, 3nc+1:6nc] .-= fm .* speedoflight^2
     @views output[3nc+1:6nc, 1:3nc] .+= fm
   end
