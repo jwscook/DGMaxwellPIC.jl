@@ -1,7 +1,7 @@
 using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra
 
 const NX = 32;
-const NY = 4;
+const NY = 3;
 
 const OX = 2;
 const OY = 2;
@@ -9,10 +9,10 @@ const OY = 2;
 const state2D = State([OX, OY], LobattoNodes);
 
 const DIMS = 2
+const L = 1;
 
 const a = zeros(DIMS);# randn(DIMS);
-const b = ones(DIMS);#a .+ rand(DIMS) .* 10;
-const area = prod(b .- a)
+const b = ones(DIMS) * L;#a .+ rand(DIMS) .* 10;
 
 gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
 
@@ -27,26 +27,42 @@ const ω = s0 * k
 fB(x, t=0) = sin(k * x[1] - ω * t)
 fE(x, t=0) = s0 * fB(x, t)
 
-electricfield!(grid2D, fE, 1);
+#electricfield!(grid2D, fE, 1);
 electricfield!(grid2D, fE, 2);
 magneticfield!(grid2D, fB, 3);
 
 const dtc = minimum((b .- a)./(NX, NY)./(OX, OY)) / DGMaxwellPIC.speedoflight
 const dt = dtc * 0.5
+const upwind = 1
 
 @show "Assembling"
-const M = assemble(grid2D, upwind=0.0) * dt / 2;
+const M = assemble(grid2D, upwind=upwind);
 @show "Building Crank-Nicolson"
-const A = (I - M) \ Matrix(I + M);
+const A = (I - M * dt / 2) \ Matrix(I + M * dt / 2);
 @show "Calcuating sources"
 const S = sources(grid2D);
 @show "Fetching dofs vector"
 const u = dofs(grid2D);
+const k1 = deepcopy(u);
+const k2 = deepcopy(u);
+const k3 = deepcopy(u);
+const k4 = deepcopy(u);
 
 
+const nturns = 2
+const NI = Int(ceil(nturns * L / s0 / dt))
 const to = TimerOutput()
-@gif for i in 1:100
-  @timeit to "u .+=" u .+= A * u
+@gif for i in 1:NI
+  @timeit to "k1 =" mul!(k1, M, u)
+  @timeit to "k2 =" @. k2 = u + dt * k1 / 2
+  @timeit to "k2 =" mul!(k2, M, k2)
+  @timeit to "k2 =" @. k3 = u + dt * k2 / 2
+  @timeit to "k3 =" mul!(k3, M, k3)
+  @timeit to "k4 =" @. k4 = u + dt * k3
+  @timeit to "k4 =" mul!(k4, M, k4)
+  @timeit to "u .+=" @. u += dt * (k1 + 2k2 + 2k3 + k4) / 6
+
+  #@timeit to "u .+=" u .+= M * u
   @timeit to "dofs!" dofs!(grid2D, u)
   p1 = heatmap(electricfield(grid2D, 1))
   p2 = heatmap(electricfield(grid2D, 2))

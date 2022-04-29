@@ -41,10 +41,11 @@ const upwind = 1
 # (1 - dt/2 * a)*u1 = (1 + dt/2 * a) * u0
 # u1 = (1 - dt/2 * a)^-1 (1 + dt/2 * a) * u0
 
-const C = assemble(grid1D, upwind=upwind) * dt;
+const M = assemble(grid1D, upwind=upwind);
+const C = M * dt;
 const Acranknicolson = (I - C * 0.5) \ Matrix(I + C * 0.5);
 
-const Aforwardeuler = I + assemble(grid1D, upwind=upwind) * dt;
+const Aforwardeuler = I + M * dt;
 const Aalmostcranknicolson = (I - C * 0.6) \ Matrix(I + C * 0.4);
 
 # du/dt = a * u
@@ -56,7 +57,7 @@ const Aalmostcranknicolson = (I - C * 0.6) \ Matrix(I + C * 0.4);
 #
 #const Abackwardeuler = inv(I - C);
 #
-const A = Acranknicolson
+#const A = Acranknicolson
 #const A = Aalmostcranknicolson
 #const A = Aforwardeuler
 
@@ -66,12 +67,23 @@ const u = dofs(grid1D);
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 
-const nturns = 10
+const nturns = 2
 const NI = Int(ceil(nturns * L / s0 / dt))
+const k1 = deepcopy(u)
+const k2 = deepcopy(u)
+const k3 = deepcopy(u)
+const k4 = deepcopy(u)
 
 @gif for i in 1:NI
+  @timeit to "k1 =" mul!(k1, M, u)
+  @timeit to "k2 =" @. k2 = u + dt * k1 / 2
+  @timeit to "k2 =" mul!(k2, M, k2)
+  @timeit to "k2 =" @. k3 = u + dt * k2 / 2
+  @timeit to "k3 =" mul!(k3, M, k3)
+  @timeit to "k4 =" @. k4 = u + dt * k3
+  @timeit to "k4 =" mul!(k4, M, k4)
+  @timeit to "u .+=" @. u += dt * (k1 + 2k2 + 2k3 + k4) / 6
   #@timeit to "u .=" u .= A * u
-  @timeit to "u .=" u .= A * u
   @timeit to "dofs!" dofs!(grid1D, u)
   t = i * dt
   p1 = plot(x, electricfield(grid1D, 1), ylims=[-s0,s0]); title!("$i of $NI")

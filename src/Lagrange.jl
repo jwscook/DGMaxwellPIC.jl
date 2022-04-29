@@ -49,12 +49,8 @@ Base.size(n::NDimNodes) = Tuple(length(n.nodes[i]) for i in eachindex(n))
 Base.hash(n::NDimNodes) = mapreduce(hash, hash, n)
 ndofs(n::NDimNodes) = prod(length, n.nodes)
 
-#_a(x) = -ones(length(x))
-#_b(x) = ones(length(x))
-#
-#
-_a(::Val{1}) = -1
-_b(::Val{1}) = 1
+#_a(::Val{1}) = -1
+#_b(::Val{1}) = 1
 _a(::Val{N}) where N = -(@SArray ones(N))
 _b(::Val{N}) where N = @SArray ones(N)
 _a(n::NDimNodes) = _a(Val(ndims(n)))
@@ -155,17 +151,18 @@ function lagrange!(dofs, xs::AbstractArray{<:Real, 2}, nodes::NDimNodes, value::
   maybesolvedofs!(dofs, nodes, solvedofsornot)
 end
 
-quadrature(::Val{1}) = QuadGK.quadgk
+#quadrature(::Val{1}) = QuadGK.quadgk
 quadrature(::Val{N}) where N = HCubature.hcubature
 quadrature(n::NDimNodes) = quadrature(Val(ndims(n)))
 function lagrange!(dofs, nodes::NDimNodes, f::F,
     solvedofsornot::MaybeSolveDofs=SolveDofsNow()) where {F<:Function}
-  quad = quadrature(nodes)
   a, b = _a(nodes), _b(nodes)
   @assert size(dofs) == Tuple(length(n) for n in nodes)
   for i in CartesianIndices(dofs)
     t = Tuple(i)
-    dofs[i] = quad(x->f(x) * lagrange(x, nodes, t, 1), a, b, atol=10eps(), rtol=sqrt(eps()))[1]
+    dofs[i] = HCubature.hcubature(x->f(x) * lagrange(x, nodes, t, 1), a, b,
+                                  atol=ATOL, rtol=sqrt(eps()))[1]
+#    dofs[i] *= dofs[i] > ATOL
   end
   maybesolvedofs!(dofs, nodes, solvedofsornot)
 end
@@ -173,7 +170,9 @@ function massmatrix(nodesi::T, nodesj::U,
     ) where {T<:AbstractLagrangeNodes,U<:AbstractLagrangeNodes}
   output = zeros(length(nodesi), length(nodesj))
   for j in eachindex(nodesj), i in eachindex(nodesi)
-    output[i, j] = QuadGK.quadgk(x->lagrange(x, nodesi, i, 1) * lagrange(x, nodesj, j, 1), -1, 1)[1]
+    output[i, j] = QuadGK.quadgk(x->lagrange(x, nodesi, i, 1) * lagrange(x, nodesj, j, 1),
+                                 -1, 1, atol=ATOL, rtol=RTOL)[1]
+#    output[i, j] *= output[i, j] > ATOL
   end
   return output
 end
@@ -262,7 +261,9 @@ function surfacefluxstiffnessmatrix(nodesi::NDimNodes, nodesj::NDimNodes, sidei:
         output[i,j] *= lagrange(xi, nodesi[d], indi) * lagrange(xj, nodesj[d], indj)
       else
         kernel(x) = lagrange(x, nodesi[d], indi) * lagrange(x, nodesj[d], indj)
-        output[i,j] *= quadgk(kernel, -1, 1, atol=10eps(), rtol=eps())[1]
+        integral = QuadGK.quadgk(kernel, -1, 1, atol=ATOL, rtol=RTOL)[1]
+#        integral *= integral > ATOL
+        output[i,j] *= integral
       end
     end
   end
@@ -304,10 +305,13 @@ function _volumefluxstiffnessmatrix(nodesi::AbstractLagrangeNodes, nodesj::Abstr
   haskey(_volumefluxstiffnessmatrixdict, key) && return _volumefluxstiffnessmatrixdict[key]
 
   output = (if deriv
-    QuadGK.quadgk(y->lagrange(y, nodesi, indi) * lagrangederiv(y, nodesj, indj), -1, 1)[1]
+    QuadGK.quadgk(y->lagrange(y, nodesi, indi) * lagrangederiv(y, nodesj, indj),
+                  -1, 1, atol=ATOL, rtol=RTOL)[1]
   else
-    QuadGK.quadgk(y->lagrange(y, nodesi, indi) * lagrange(y, nodesj, indj), -1, 1)[1]
+    QuadGK.quadgk(y->lagrange(y, nodesi, indi) * lagrange(y, nodesj, indj),
+                  -1, 1, atol=ATOL, rtol=RTOL)[1]
   end)
+#  output *= output > ATOL
 
   _volumefluxstiffnessmatrixdict[key] = output
   return output

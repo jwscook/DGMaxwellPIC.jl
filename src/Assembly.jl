@@ -72,17 +72,17 @@ end
 
 function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
   ns = ndofs(cell)
-  output = spzeros(ns, ns)
+  output = zeros(ns, ns)
   nc = ndofs(cell, 1) # number of dofs per component
-  lumm = lu(massmatrix(nodes) * jacobian(cell))
+  lumm = lu(kron(I(6), massmatrix(cell) * jacobian(cell)))
   for dim in 1:N
     fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell)
-    ldiv!(lumm, fmm)
-    fm = fluxmatrix(Val(dim), fmm)
+    fm = Matrix(fluxmatrix(Val(dim), fmm))
     @views output[1:3nc, 3nc+1:6nc] .-= fm .* speedoflight^2
     @views output[3nc+1:6nc, 1:3nc] .+= fm
   end
-  return output
+  ldiv!(lumm, output)
+  return sparse(output)
 end
 volumefluxstiffnessmatrix(g::Grid{N,T}) where {N,T} = assembler(g, volumefluxstiffnessmatrix)
 
@@ -101,8 +101,7 @@ function assembler(g::Grid{N,T}, f::F) where {N,T, F}
 end
 
 function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
-  correctionfactor = numelements(g) / volume(g) * 2
-  return correctionfactor .* (volumefluxstiffnessmatrix(g) + surfacefluxstiffnessmatrix(g, upwind))
+  return volumefluxstiffnessmatrix(g) + surfacefluxstiffnessmatrix(g, upwind)
 end
 
 

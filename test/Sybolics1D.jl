@@ -99,14 +99,6 @@ vec3 = vcat(Ex3, Ey3, Ez3, Bx3, By3, Bz3)
 vec = vcat(vec1, vec2, vec3)
 
 
-V = Matrix(vmm) \ vfsm
-outputV = V * vec
-S = Matrix(vmm) \ sfsm
-outputS = S * vec
-
-for i in eachindex(vec)
-  @show vec[i], outputV[i], outputS[i]
-end
 @show "Full matrix operator"
 output = M * vec
 for i in eachindex(output)

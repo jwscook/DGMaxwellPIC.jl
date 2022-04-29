@@ -18,9 +18,12 @@ using SparseArrays
 using SpecialPolynomials
 using StaticArrays
 
-const speedoflight = 10.0
+const speedoflight = 1.0
 const epsilon0 = 1.0
 const mu0 = 1.0
+
+const ATOL=10eps()
+const RTOL=10eps()
 
 @enum FaceDirection High Low
 opposite(side::FaceDirection) = side == High ? Low : High
