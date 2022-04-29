@@ -1,8 +1,8 @@
 using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra
 
-const NX = 32;
+const NX = 64;
 
-const OX = 3;
+const OX = 5;
 
 const state1D = State([OX], LobattoNodes);
 #const state1D = State([OX], LegendreNodes);
@@ -31,27 +31,43 @@ magneticfield!(grid1D, fBz, 3);
 #DGMaxwellPIC.magneticfielddofs!(grid1D, 1.0, 3);
 
 const dtc = minimum((b .- a)./NX./OX) / s0
-const dt = dtc * 0.95
+const dt = dtc * 0.25
+const upwind = 1
 
-# du/dt = A * u
-# u1 - u0 = dt * (A * u)
-# u1 - u0 = dt * (A * (u1 + u0)/2)
-# u1 = u0 + dt/2 * A * u1 + dt/2 * A * u0
-# (1 - dt/2 * A)*u1 = (1 + dt/2 * A) * u0
-# u1 = (1 - dt/2 * A)^-1 (1 + dt/2 * A) * u0
+# du/dt = a * u
+# u1 - u0 = dt * (a * u)
+# u1 - u0 = dt * (a * (u1 + u0)/2)
+# u1 = u0 + dt/2 * a * u1 + dt/2 * a * u0
+# (1 - dt/2 * a)*u1 = (1 + dt/2 * a) * u0
+# u1 = (1 - dt/2 * a)^-1 (1 + dt/2 * a) * u0
 
-const C = assemble(grid1D, upwind=0.0) * dt / 2;
-const B = lu(I - C);
-const A = B \ Matrix(I + C);
-#const A = I + assemble(grid1D, upwind=0.0) * dt;
+const C = assemble(grid1D, upwind=upwind) * dt;
+const Acranknicolson = (I - C * 0.5) \ Matrix(I + C * 0.5);
+
+const Aforwardeuler = I + assemble(grid1D, upwind=upwind) * dt;
+const Aalmostcranknicolson = (I - C * 0.6) \ Matrix(I + C * 0.4);
+
+# du/dt = a * u
+# u1 - u0 = dt * (a * u)
+# u1 - u0 = dt * (a * u1)
+# u1 = u0 + dt * a * u1
+# (1 - dt * a)*u1 = u0
+# u1 = (1 - dt * a)^-1 * u0
+#
+#const Abackwardeuler = inv(I - C);
+#
+const A = Acranknicolson
+#const A = Aalmostcranknicolson
+#const A = Aforwardeuler
+
 const S = sources(grid1D);
 const u = dofs(grid1D);
 
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 
-const nturns = 1
-const NI = Int(ceil(nturns * L/ s0 / dt))
+const nturns = 10
+const NI = Int(ceil(nturns * L / s0 / dt))
 
 @gif for i in 1:NI
   #@timeit to "u .=" u .= A * u
@@ -68,5 +84,5 @@ const NI = Int(ceil(nturns * L/ s0 / dt))
   plot!(p6, x, [fBz([xi], t) for xi in x], ylims=[-1,1])
   plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   @show i, i * dt * s0
-end every 1
+end every 8
 show(to)

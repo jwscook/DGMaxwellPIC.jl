@@ -47,6 +47,7 @@ Base.eltype(n::AbstractLagrangeNodes{T}) where {T<:Number} = T
 end
 Base.size(n::NDimNodes) = Tuple(length(n.nodes[i]) for i in eachindex(n))
 Base.hash(n::NDimNodes) = mapreduce(hash, hash, n)
+ndofs(n::NDimNodes) = prod(length, n.nodes)
 
 #_a(x) = -ones(length(x))
 #_b(x) = ones(length(x))
@@ -239,32 +240,14 @@ function lumassmatrix(args...)
 end
 
 
-
 const surfacefluxstiffnessmatrixdict = Dict{UInt64, Any}()
 
-surfacefluxstiffnessmatrix(n::NDimNodes, dim::Int64, side::FaceDirection) = surfacefluxstiffnessmatrix(n, n, dim, side)
-
-function surfacefluxstiffnessmatrix(nodesi::NDimNodes{1}, nodesj::NDimNodes{1}, dim::Int64, side::FaceDirection)
-  @assert dim == 1
-  key = mapreduce(hash, hash, (nodesi, nodesj, dim, side))
-  haskey(surfacefluxstiffnessmatrixdict, key) && return surfacefluxstiffnessmatrixdict[key]
-  x = side == Low ? -1 : 1
-  szi = Tuple(length(n) for n in nodesi)
-  szj = Tuple(length(n) for n in nodesj)
-  output = zeros(prod(szi), prod(szj))
-  for (j, jj) in enumerate(CartesianIndices(szj)), (i, ii) in enumerate(CartesianIndices(szi))
-    output[i, j] = lagrange(x, nodesi[1], i) * lagrange(x, nodesj[1], j)
-  end
-  surfacefluxstiffnessmatrixdict[key] = output
-  return output
-end
-
-function surfacefluxstiffnessmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::Int64, side::FaceDirection)
+function surfacefluxstiffnessmatrix(nodesi::NDimNodes, nodesj::NDimNodes, sidei::FaceDirection, sidej::FaceDirection, dim::Int64)
   N = ndims(nodesi)
   @assert 0 < dim <= N
   @assert N == ndims(nodesj)
 
-  key = mapreduce(hash, hash, (nodesi, nodesj, dim, side))
+  key = mapreduce(hash, hash, (nodesi, nodesj, sidei, sidej, dim))
   haskey(surfacefluxstiffnessmatrixdict, key) && return surfacefluxstiffnessmatrixdict[key]
 
   szi = Tuple(length(n) for n in nodesi)
@@ -273,11 +256,12 @@ function surfacefluxstiffnessmatrix(nodesi::NDimNodes, nodesj::NDimNodes, dim::I
   for (j, jj) in enumerate(CartesianIndices(szj)), (i, ii) in enumerate(CartesianIndices(szi))
     for d in 1:N # integrating over face at *side* of cell at const *dim*
       indi, indj = Tuple(ii)[d], Tuple(jj)[d]
-      kernel(x) = lagrange(x, nodesi[d], indi) * lagrange(x, nodesj[d], indj)
       if d == dim
-        x = side == Low ? -1.0 : 1.0
-        output[i,j] *= kernel(x)
+        xi = sidei == Low ? -1.0 : 1.0
+        xj = sidej == Low ? -1.0 : 1.0
+        output[i,j] *= lagrange(xi, nodesi[d], indi) * lagrange(xj, nodesj[d], indj)
       else
+        kernel(x) = lagrange(x, nodesi[d], indi) * lagrange(x, nodesj[d], indj)
         output[i,j] *= quadgk(kernel, -1, 1, atol=10eps(), rtol=eps())[1]
       end
     end

@@ -6,7 +6,7 @@ const NY = 4;
 const OX = 2;
 const OY = 2;
 
-const state2D = State([OX, OY], LegendreNodes);
+const state2D = State([OX, OY], LobattoNodes);
 
 const DIMS = 2
 
@@ -24,19 +24,18 @@ const s0 = DGMaxwellPIC.speedoflight
 const k = 4pi / (b[1] - a[1])
 const ω = s0 * k
 
-fBz(x, t=0) = sin(k * x[1] - ω * t)
-fEy(x, t=0) = s0 * fBz(x, t)
+fB(x, t=0) = sin(k * x[1] - ω * t)
+fE(x, t=0) = s0 * fB(x, t)
 
-electricfield!(grid2D, fEy, 2);
-magneticfield!(grid2D, fBz, 3);
-
+electricfield!(grid2D, fE, 1);
+electricfield!(grid2D, fE, 2);
+magneticfield!(grid2D, fB, 3);
 
 const dtc = minimum((b .- a)./(NX, NY)./(OX, OY)) / DGMaxwellPIC.speedoflight
 const dt = dtc * 0.5
 
 @show "Assembling"
 const M = assemble(grid2D, upwind=0.0) * dt / 2;
-@show size(M)
 @show "Building Crank-Nicolson"
 const A = (I - M) \ Matrix(I + M);
 @show "Calcuating sources"
@@ -46,7 +45,7 @@ const u = dofs(grid2D);
 
 
 const to = TimerOutput()
-@gif for i in 1:10000
+@gif for i in 1:100
   @timeit to "u .+=" u .+= A * u
   @timeit to "dofs!" dofs!(grid2D, u)
   p1 = heatmap(electricfield(grid2D, 1))

@@ -13,34 +13,31 @@ _fluxmatrix(stencil, x::AbstractArray) = sparse(kron(stencil, x))
 upwindfluxmatrix(::Val{1}, x) = _fluxmatrix((@SArray [0 0 0; 0 1 0; 0 0 1]), x)
 upwindfluxmatrix(::Val{2}, x) = _fluxmatrix((@SArray [1 0 0; 0 0 0; 0 0 1]), x)
 upwindfluxmatrix(::Val{3}, x) = _fluxmatrix((@SArray [1 0 0; 0 1 0; 0 0 0]), x)
-#@memoize upwindfluxmatrix(::Val{T}, n::Integer) where {T} = fluxmatrix(Val(T), I(n))
-#upwindfluxmatrix(s::State{N}, a) where N = sum(upwindfluxmatrix(Val(i), a) for i in 1:N)
 
 # positive curl / levi-civita
 fluxmatrix(::Val{1}, x) = _fluxmatrix((@SArray [0 0 0; 0 0 1; 0 -1 0]), x)
 fluxmatrix(::Val{2}, x) = _fluxmatrix((@SArray [0 0 -1; 0 0 0; 1 0 0]), x)
 fluxmatrix(::Val{3}, x) = _fluxmatrix((@SArray [0 1 0; -1 0 0; 0 0 0]), x)
-#@memoize fluxmatrix(::Val{T}, n::Integer) where {T} = fluxmatrix(Val(T), I(n))
 
-function surfacefluxstiffnessmatrix(cell::Cell, nodes::NDimNodes, dim, side::FaceDirection, rev::Bool, upwind=0.0)
-  output = zeros(ndofs(cell), ndofs(cell))
-  return surfacefluxstiffnessmatrix!(output, cell, nodes, dim, side, rev, upwind)
+function surfacefluxstiffnessmatrix(nodesi::NDimNodes, nodesj::NDimNodes, sidei::FaceDirection,
+    sidej::FaceDirection, dim::Integer, upwind=0.0)
+  output = zeros(6ndofs(nodesi), 6ndofs(nodesj))
+  return surfacefluxstiffnessmatrix!(output, nodesi, nodesj, sidei, sidej, dim, upwind)
 end
 
-function surfacefluxstiffnessmatrix!(output, cell::Cell, nodes::NDimNodes, dim, side::FaceDirection, rev::Bool,
-    upwind=0.0)
-  @assert size(output) == (ndofs(cell), ndofs(cell))
-  nc = ndofs(cell, 1) # number of dofs per component
-  sfmm = surfacefluxstiffnessmatrix(nodes, nodes, dim, side) * jacobian(cell; ignore=dim)
-  rev && reverse!(sfmm, dims=1) # to account for addition of flux terms from neighbours. It's complicated.
-  @assert size(sfmm) == (nc, nc) "$(size(sfmm)) != ($nc, $nc)"
+function surfacefluxstiffnessmatrix!(output, nodesi::NDimNodes, nodesj::NDimNodes, sidei::FaceDirection, sidej::FaceDirection, dim::Integer, upwind=0.0)
+  nci = ndofs(nodesi) # number of dofs per component
+  ncj = ndofs(nodesj) # number of dofs per component
+  sfmm = surfacefluxstiffnessmatrix(nodesi, nodesj, sidei, sidej, dim)
+  @assert size(sfmm) == (nci, ncj) "$(size(sfmm)) != ($nci, $ncj)"
   fm = fluxmatrix(Val(dim), sfmm)
-  @views output[1:3nc, 3nc+1:6nc] .-= fm .* speedoflight^2
-  @views output[3nc+1:6nc, 1:3nc] .+= fm
+  @views output[1:3nci, 3ncj+1:6ncj] .-= fm .* speedoflight^2
+  @views output[3nci+1:6nci, 1:3ncj] .+= fm
   if !iszero(upwind)
-    ufm = upwindfluxmatrix(Val(dim), sfmm) * upwind * jacobian(cell; ignore=dim)
-    @views output[1:3nc, 1:3nc] .+= ufm .* epsilon0
-    @views output[3nc+1:6nc, 3nc+1:6nc] .+= ufm
+    ufm = upwindfluxmatrix(Val(dim), sfmm) * upwind * speedoflight / 2
+    sidei == Low && (ufm .*= -1)
+    @views output[1:3nci, 1:3ncj] .+= ufm .* epsilon0
+    @views output[3nci+1:6nci, 3ncj+1:6ncj] .+= ufm
   end
   return output
 end
@@ -50,16 +47,19 @@ function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
   for cartindex in CartesianIndices(g.data)
     cellindex = Tuple(cartindex)
     cell = g[cartindex]
-    nodes = NDimNodes(dofshape(cell), T)
+    nodesi = NDimNodes(dofshape(cell), T)
     celldofindices = indices(g, cellindex)
     lumm = lu(kron(I(6), massmatrix(cell)))
     for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
-      flux = surfacefluxstiffnessmatrix(cell, nodes, dim, side, false, upwind)
+      flux = surfacefluxstiffnessmatrix(nodesi, nodesi, side, side, dim, upwind)
+      flux .*= jacobian(cell; ignore=dim)
       @views output[celldofindices, celldofindices] .-= flux .* factor
 
       neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
       neighbourcell = g[neighbourcellgridindex...]
-      flux = surfacefluxstiffnessmatrix(neighbourcell, nodes, dim, opposite(side), true, upwind)
+      nodesj = NDimNodes(dofshape(neighbourcell), T)
+      flux = surfacefluxstiffnessmatrix(nodesi, nodesj, side, opposite(side), dim, upwind)
+      flux .*= jacobian(cell; ignore=dim)
       ldiv!(lumm, flux)
 
       neighbourdofindices = indices(g, neighbourcellgridindex)

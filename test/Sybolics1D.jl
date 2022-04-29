@@ -30,6 +30,7 @@ magneticfield!(g, fBz, 3);
 
 const dtc = minimum((b .- a)./NX./OX) / s0
 const dt = dtc * 0.2
+const upwind = 1
 
 # du/dt = A * u
 # u1 - u0 = dt * (A * u)
@@ -37,15 +38,15 @@ const dt = dtc * 0.2
 # u1 = u0 + dt/2 * A * u1 + dt/2 * A * u0
 # (1 - dt/2 * A)*u1 = (1 + dt/2 * A) * u0
 # u1 = (1 - dt/2 * A)^-1 (1 + dt/2 * A) * u0
-const M = assemble(g, upwind=0.0)
+const M = assemble(g, upwind=upwind)
 const C = M * dt / 2;
 const B = lu(I - C);
 const A_CN = B \ Matrix(I + C);
-const A_explicit = I + assemble(g, upwind=0.0) * dt;
+const A_explicit = I + assemble(g, upwind=upwind) * dt;
 
 vmm = DGMaxwellPIC.volumemassmatrix(g)
 vfsm = DGMaxwellPIC.volumefluxstiffnessmatrix(g)
-sfsm = DGMaxwellPIC.surfacefluxstiffnessmatrix(g)
+sfsm = DGMaxwellPIC.surfacefluxstiffnessmatrix(g, upwind)
 
 using Plots
 heatmap(Matrix(vmm), yflip=true)
