@@ -101,7 +101,9 @@ function assembler(g::Grid{N,T}, f::F) where {N,T, F}
 end
 
 function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
-  return volumefluxstiffnessmatrix(g) + surfacefluxstiffnessmatrix(g, upwind)
+  output = volumefluxstiffnessmatrix(g)
+  output += surfacefluxstiffnessmatrix(g, upwind)
+  return output
 end
 
 

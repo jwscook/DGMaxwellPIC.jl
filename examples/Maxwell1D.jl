@@ -4,8 +4,8 @@ const NX = 64;
 
 const OX = 5;
 
-const state1D = State([OX], LobattoNodes);
-#const state1D = State([OX], LegendreNodes);
+#const state1D = State([OX], LobattoNodes);
+const state1D = State([OX], LegendreNodes);
 
 const DIMS = 1
 const L = sqrt(2) * 10 #rand() * 10.0
@@ -47,6 +47,7 @@ const Acranknicolson = (I - C * 0.5) \ Matrix(I + C * 0.5);
 
 const Aforwardeuler = I + M * dt;
 const Aalmostcranknicolson = (I - C * 0.6) \ Matrix(I + C * 0.4);
+const Abackwardeuler = inv(Matrix(I - C))
 
 # du/dt = a * u
 # u1 - u0 = dt * (a * u)
@@ -57,9 +58,10 @@ const Aalmostcranknicolson = (I - C * 0.6) \ Matrix(I + C * 0.4);
 #
 #const Abackwardeuler = inv(I - C);
 #
-#const A = Acranknicolson
+const A = Acranknicolson
 #const A = Aalmostcranknicolson
 #const A = Aforwardeuler
+#const A = Abackwardeuler
 
 const S = sources(grid1D);
 const u = dofs(grid1D);
@@ -75,15 +77,15 @@ const k3 = deepcopy(u)
 const k4 = deepcopy(u)
 
 @gif for i in 1:NI
-  @timeit to "k1 =" mul!(k1, M, u)
+  @timeit to "k1 =" k1 .= M * u
   @timeit to "k2 =" @. k2 = u + dt * k1 / 2
-  @timeit to "k2 =" mul!(k2, M, k2)
-  @timeit to "k2 =" @. k3 = u + dt * k2 / 2
-  @timeit to "k3 =" mul!(k3, M, k3)
+  @timeit to "k2 =" k2 .= M * k2
+  @timeit to "k3 =" @. k3 = u + dt * k2 / 2
+  @timeit to "k3 =" k3 .= M * k3
   @timeit to "k4 =" @. k4 = u + dt * k3
-  @timeit to "k4 =" mul!(k4, M, k4)
+  @timeit to "k4 =" k4 .= M * k4
   @timeit to "u .+=" @. u += dt * (k1 + 2k2 + 2k3 + k4) / 6
-  #@timeit to "u .=" u .= A * u
+  #@timeit to "u .= A * u" u .= A * u
   @timeit to "dofs!" dofs!(grid1D, u)
   t = i * dt
   p1 = plot(x, electricfield(grid1D, 1), ylims=[-s0,s0]); title!("$i of $NI")

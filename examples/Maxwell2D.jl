@@ -1,10 +1,10 @@
 using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra
 
 const NX = 32;
-const NY = 3;
+const NY = 8;
 
-const OX = 2;
-const OY = 2;
+const OX = 3;
+const OY = 3;
 
 const state2D = State([OX, OY], LobattoNodes);
 
@@ -48,21 +48,19 @@ const k2 = deepcopy(u);
 const k3 = deepcopy(u);
 const k4 = deepcopy(u);
 
-
-const nturns = 2
+const nturns = 1
 const NI = Int(ceil(nturns * L / s0 / dt))
 const to = TimerOutput()
 @gif for i in 1:NI
-  @timeit to "k1 =" mul!(k1, M, u)
-  @timeit to "k2 =" @. k2 = u + dt * k1 / 2
-  @timeit to "k2 =" mul!(k2, M, k2)
-  @timeit to "k2 =" @. k3 = u + dt * k2 / 2
-  @timeit to "k3 =" mul!(k3, M, k3)
-  @timeit to "k4 =" @. k4 = u + dt * k3
-  @timeit to "k4 =" mul!(k4, M, k4)
-  @timeit to "u .+=" @. u += dt * (k1 + 2k2 + 2k3 + k4) / 6
-
-  #@timeit to "u .+=" u .+= M * u
+  #@timeit to "k1 =" k1 .= M * u
+  #@timeit to "k2 =" @. k2 = u + dt * k1 / 2
+  #@timeit to "k2 =" k2 .= M *k2
+  #@timeit to "k3 =" @. k3 = u + dt * k2 / 2
+  #@timeit to "k3 =" k3 .= M * k3
+  #@timeit to "k4 =" @. k4 = u + dt * k3
+  #@timeit to "k4 =" k4 .= M * k4
+  #@timeit to "u .+=" @. u += dt * (k1 + 2k2 + 2k3 + k4) / 6
+  @timeit to "u .= A * u" u .= A * u
   @timeit to "dofs!" dofs!(grid2D, u)
   p1 = heatmap(electricfield(grid2D, 1))
   p2 = heatmap(electricfield(grid2D, 2))
@@ -72,5 +70,5 @@ const to = TimerOutput()
   p6 = heatmap(magneticfield(grid2D, 3))
   plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   @show i
-end every 2
+end every 1
 show(to)
