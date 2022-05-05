@@ -21,7 +21,7 @@ const g = Grid([Cell(deepcopy(state2D), gridposition(((i-1)/NX, (j-1)/NY)), grid
 
 const dtc = minimum((b .- a)./NX./OX) / DGMaxwellPIC.speedoflight
 const dt = dtc * 0.2
-const upwind = 0
+const upwind = 1
 
 # du/dt = A * u
 # u1 - u0 = dt * (A * u)

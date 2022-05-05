@@ -1,4 +1,4 @@
-using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra
+using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra, LoopVectorization
 
 const NX = 64;
 
@@ -75,16 +75,20 @@ const k1 = deepcopy(u)
 const k2 = deepcopy(u)
 const k3 = deepcopy(u)
 const k4 = deepcopy(u)
+const work = deepcopy(u)
 
+function substep!(y, w, A, u, k, a)
+  @tturbo for i in eachindex(y)
+    w[i] = u[i] + k[i] * a
+  end
+  mul!(y, A, w)
+end
 @gif for i in 1:NI
-  @timeit to "k1 =" k1 .= M * u
-  @timeit to "k2 =" @. k2 = u + dt * k1 / 2
-  @timeit to "k2 =" k2 .= M * k2
-  @timeit to "k3 =" @. k3 = u + dt * k2 / 2
-  @timeit to "k3 =" k3 .= M * k3
-  @timeit to "k4 =" @. k4 = u + dt * k3
-  @timeit to "k4 =" k4 .= M * k4
-  @timeit to "u .+=" @. u += dt * (k1 + 2k2 + 2k3 + k4) / 6
+  @timeit to "k1 =" mul!(k1, M, u)
+  @timeit to "k4 =" substep!(k2, work, M, u, k1, dt/2)
+  @timeit to "k4 =" substep!(k3, work, M, u, k2, dt/2)
+  @timeit to "k4 =" substep!(k4, work, M, u, k2, dt)
+  @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
   #@timeit to "u .= A * u" u .= A * u
   @timeit to "dofs!" dofs!(grid1D, u)
   t = i * dt

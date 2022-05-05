@@ -52,14 +52,14 @@ function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
     lumm = lu(kron(I(6), massmatrix(cell)))
     for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
       flux = surfacefluxstiffnessmatrix(nodesi, nodesi, side, side, dim, upwind)
-      flux .*= jacobian(cell; ignore=dim)
+      flux .*= jacobian(cell)#; ignore=dim)
       @views output[celldofindices, celldofindices] .-= flux .* factor
 
       neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
       neighbourcell = g[neighbourcellgridindex...]
       nodesj = NDimNodes(dofshape(neighbourcell), T)
       flux = surfacefluxstiffnessmatrix(nodesi, nodesj, side, opposite(side), dim, upwind)
-      flux .*= jacobian(cell; ignore=dim)
+      flux .*= jacobian(cell)#; ignore=dim)
       ldiv!(lumm, flux)
 
       neighbourdofindices = indices(g, neighbourcellgridindex)
@@ -74,9 +74,10 @@ function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
   ns = ndofs(cell)
   output = zeros(ns, ns)
   nc = ndofs(cell, 1) # number of dofs per component
-  lumm = lu(kron(I(6), massmatrix(cell) * jacobian(cell)))
+  J = jacobian(cell)
+  lumm = lu(kron(I(6), massmatrix(nodes) * J))
   for dim in 1:N
-    fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell)
+    fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * J
     fm = fluxmatrix(Val(dim), fmm)
     @views output[1:3nc, 3nc+1:6nc] .-= fm .* speedoflight^2
     @views output[3nc+1:6nc, 1:3nc] .+= fm
@@ -86,8 +87,8 @@ function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
 end
 volumefluxstiffnessmatrix(g::Grid{N,T}) where {N,T} = assembler(g, volumefluxstiffnessmatrix)
 
-volumemassmatrix(c::Cell, n::NDimNodes) = kron(I(6), massmatrix(n)) * jacobian(c)
-volumemassmatrix(g::Grid{N,T}) where {N,T} = assembler(g, volumemassmatrix)
+#volumemassmatrix(c::Cell, n::NDimNodes) = kron(I(6), massmatrix(n)) * jacobian(c)
+#volumemassmatrix(g::Grid{N,T}) where {N,T} = assembler(g, volumemassmatrix)
 
 function assembler(g::Grid{N,T}, f::F) where {N,T, F}
   n = ndofs(g)
@@ -103,7 +104,9 @@ end
 function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
   output = volumefluxstiffnessmatrix(g)
   output += surfacefluxstiffnessmatrix(g, upwind)
-  return output
+#  return output
+  correctionfactor = numelements(g) / volume(g) * 2^N
+  return output * correctionfactor
 end
 
 
