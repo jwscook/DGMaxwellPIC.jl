@@ -20,8 +20,6 @@ for (stub, fname, orthog) in ((:Legendre, gausslegendre, true), (:Lobatto, gauss
   end
   @eval function $(structname)(N::Int)
     n, w = $(fname)(N)
-    #n = (n .+ 1) ./ 2 .* (b - a) .+ a
-    #w = w .* (b - a)/2
     invdenominators = [mapreduce(j->isequal(i, j) ? one(eltype(n)) : (1 / (n[i] - n[j])), *, eachindex(n)) for i in eachindex(n)]
     return $(structname)(n, w, invdenominators)
   end
@@ -49,8 +47,6 @@ Base.size(n::NDimNodes) = Tuple(length(n.nodes[i]) for i in eachindex(n))
 Base.hash(n::NDimNodes) = mapreduce(hash, hash, n)
 ndofs(n::NDimNodes) = prod(length, n.nodes)
 
-#_a(::Val{1}) = -1
-#_b(::Val{1}) = 1
 _a(::Val{N}) where N = -(@SArray ones(N))
 _b(::Val{N}) where N = @SArray ones(N)
 _a(n::NDimNodes) = _a(Val(ndims(n)))
@@ -73,7 +69,7 @@ end
 ndims(n::NDimNodes) = length(n.nodes)
 
 #evaluate one function without coefficient
-function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Real}
+function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Number}
   T = promote_type(R, eltype(n))
   output = n.invdenominators[ind] * one(T)
   @inbounds for j in eachindex(n)
@@ -83,21 +79,8 @@ function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Real}
   return output
 end
 
-#evaluate one function without coefficient
 lagrange(x::Number, nodes::AbstractLagrangeNodes, ind::Integer) = nodes(x, ind)
-#function lagrange(x::Number, nodes::AbstractLagrangeNodes, ind::Integer)
-#  T = promote_type(R, eltype(nodes))
-#  output = one(T)
-#  for j in eachindex(nodes)
-#    j == ind && continue
-#    output *= (x - nodes[j]) / (nodes[ind] - nodes[j])
-#  end
-#  return output
-#end
-
-#evaluate one function with coefficient
-#lagrange(x::Real, nodes::AbstractLagrangeNodes, ind::Integer, coeff::Number) = lagrange(x, nodes, ind) * coeff
-lagrange(x::Real, nodes::AbstractLagrangeNodes, ind::Integer, coeff::Number) = nodes(x, ind) * coeff
+lagrange(x::Number, nodes::AbstractLagrangeNodes, ind::Integer, coeff::Number) = nodes(x, ind) * coeff
 
 #evaluate one cartesian product of functions for one coefficient
 function lagrange(x, nodes::NDimNodes, inds, coeff::T) where {T<:Number}
@@ -178,7 +161,8 @@ function massmatrix(nodesi::T, nodesj::T
   return Diagonal(deepcopy(weights(nodesi)))
 end
 
-massmatrix(nodes::AbstractLagrangeNodes) = massmatrix(nodes, nodes)
+massmatrix(n::AbstractLagrangeNodes) = massmatrix(n, n)
+massmatrix(n::AbstractLagrangeNodes, jacobian::Number) = massmatrix(n, n) * jacobian
 
 const massmatrixdictsdict = Dict{UInt64, Any}()
 

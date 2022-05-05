@@ -48,7 +48,7 @@ chargefieldindices(s::Union{State,Cell}) = ndofs(s, 1:9) .+ (1:ndofs(s, 10))
 
 function dofs(grid::Grid)
   output = zeros(ndofs(grid))
-  for i in CartesianIndices(grid.data)
+  @threads for i in CartesianIndices(grid.data)
     cell = grid[i]
     output[indices(grid, Tuple(i))] .= dofs(cell)
   end
@@ -56,16 +56,16 @@ function dofs(grid::Grid)
 end
 
 function dofs!(grid::Grid, x::Number)
-  for cell in grid
+  @threads for cell in grid
     dofs!(cell, x)
   end
   return grid
 end
 
 function dofs!(grid::Grid, x::AbstractArray)
-  for i in CartesianIndices(grid.data)
+  @threads for i in CartesianIndices(grid.data)
     cell = grid[i]
-    dofs!(cell, x[indices(grid, Tuple(i))])
+    dofs!(cell, (@view x[indices(grid, Tuple(i))]))
   end
   return grid
 end
