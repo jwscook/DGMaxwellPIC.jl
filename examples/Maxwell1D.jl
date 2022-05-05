@@ -8,7 +8,7 @@ const OX = 5;
 const state1D = State([OX], LegendreNodes);
 
 const DIMS = 1
-const L = sqrt(2) * 10 #rand() * 10.0
+const L = 2 * NX#sqrt(2) * 10
 
 const a = zeros(DIMS);
 const b = ones(DIMS) .* L;
@@ -99,7 +99,9 @@ end
   p5 = plot(x, magneticfield(grid1D, 2), ylims=[-1,1])
   p6 = plot(x, magneticfield(grid1D, 3), ylims=[-1,1])
   plot!(p2, x, [fEy([xi], t) for xi in x], ylims=[-s0,s0])
+  plot!(p2, x, [fEy([xi], t) - electricfield(grid1D, [xi], 2) for xi in x], ylims=[-s0,s0])
   plot!(p6, x, [fBz([xi], t) for xi in x], ylims=[-1,1])
+  plot!(p6, x, [fBz([xi], t) - magneticfield(grid1D, [xi], 3) for xi in x], ylims=[-1,1])
   plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   @show i, i * dt * s0
 end every 8

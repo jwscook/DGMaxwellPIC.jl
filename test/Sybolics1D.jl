@@ -44,21 +44,10 @@ const B = lu(I - C);
 const A_CN = B \ Matrix(I + C);
 const A_explicit = I + assemble(g, upwind=upwind) * dt;
 
-vmm = DGMaxwellPIC.volumemassmatrix(g)
 vfsm = DGMaxwellPIC.volumefluxstiffnessmatrix(g)
 sfsm = DGMaxwellPIC.surfacefluxstiffnessmatrix(g, upwind)
 
 using Plots
-heatmap(Matrix(vmm), yflip=true)
-xticks!(1:6*OX*NX)
-yticks!(1:6*OX*NX)
-savefig("vmm.pdf")
-
-heatmap(log10.(abs.(Matrix(vmm))), yflip=true)
-xticks!(1:6*OX*NX)
-yticks!(1:6*OX*NX)
-savefig("vmmlog10abs.pdf")
-
 heatmap(Matrix(vfsm), yflip=true)
 xticks!(1:6*OX*NX)
 yticks!(1:6*OX*NX)

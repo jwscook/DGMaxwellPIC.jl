@@ -1,6 +1,6 @@
 using DGMaxwellPIC, ForwardDiff, QuadGK, Suppressor, Test
 
-import DGMaxwellPIC: lagrange, volumemassmatrix, massmatrix, NDimNodes, volumefluxstiffnessmatrix
+import DGMaxwellPIC: lagrange, massmatrix, NDimNodes, volumefluxstiffnessmatrix
 
 @testset "Massmatrices" begin
 

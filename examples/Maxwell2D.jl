@@ -9,10 +9,10 @@ const OY = 3;
 const state2D = State([OX, OY], LegendreNodes);
 
 const DIMS = 2
-const L = 10sqrt(pi)#NX * 2;
+const L = [NX, NY] .* 2;
 
 const a = zeros(DIMS);# randn(DIMS);
-const b = ones(DIMS) * L;#a .+ rand(DIMS) .* 10;
+const b = ones(DIMS) .* L;#a .+ rand(DIMS) .* 10;
 
 gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
 
@@ -20,7 +20,7 @@ const lowers = [gridposition(((i-1)/NX, (j-1)/NY)) for i in 1:NX, j in 1:NY];
 const uppers = [gridposition((i/NX, j/NY)) for i in 1:NX, j in 1:NY];
 const grid2D = Grid([Cell(deepcopy(state2D), lowers[i,j], uppers[i,j]) for i in 1:NX, j in 1:NY]);
 
-const centres = [(lowers[i] + uppers[i])/2 for i in eachindex(lowers)]
+const centres = [(lowers[i, j] + uppers[i, j])/2 for i in 1:NX, j in 1:NY]
 const s0 = DGMaxwellPIC.speedoflight
 const k = 4pi / (b[1] - a[1])
 const ω = s0 * k
@@ -31,8 +31,8 @@ fE(x, t=0) = s0 * fB(x, t)
 electricfield!(grid2D, fE, 2);
 magneticfield!(grid2D, fB, 3);
 
-const dtc = minimum((b .- a)./(NX, NY)./(OX, OY)) / DGMaxwellPIC.speedoflight
-const dt = dtc * 0.25
+const dtc = norm((b .- a)./sqrt((NX * OX)^2 + (NY * OY)^2)) / DGMaxwellPIC.speedoflight
+const dt = dtc * 0.1
 const upwind = 1
 
 @show "Assembling"
@@ -49,8 +49,8 @@ const k3 = deepcopy(u);
 const k4 = deepcopy(u);
 const work = deepcopy(u);
 
-const nturns = 4
-const NI = Int(ceil(nturns * L / s0 / dt))
+const nturns = 1
+const NI = Int(ceil(nturns * L[1] / s0 / dt))
 const to = TimerOutput()
 
 function substep!(y, w, A, u, k, a)
@@ -67,13 +67,19 @@ end
   @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
   #@timeit to "u .= A * u" u .= A * u
   @timeit to "dofs!" dofs!(grid2D, u)
+  Eyresult = [electricfield(grid2D, xi, 2) for xi in centres]
+  Eexpected = Matrix([fE(centres[ii,jj], i * dt) for ii in 1:NX, jj in 1:NY])
+  Bexpected = Matrix([fB(centres[ii,jj], i * dt) for ii in 1:NX, jj in 1:NY])
+  err = norm(Eyresult .- Eexpected) / norm(Eexpected)
   p1 = heatmap(electricfield(grid2D, 1))
-  p2 = heatmap(electricfield(grid2D, 2)); title!(p2, "$i of $NI")
+  p2 = heatmap(electricfield(grid2D, 2)); title!(p2, "$i of $NI, error = $err")
   p3 = heatmap(electricfield(grid2D, 3))
-  p4 = heatmap(magneticfield(grid2D, 1))
-  p5 = heatmap(magneticfield(grid2D, 2))
-  p6 = heatmap(magneticfield(grid2D, 3))
-  plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
+  p4 = heatmap(Eexpected)
+  p5 = heatmap(magneticfield(grid2D, 1))
+  p6 = heatmap(magneticfield(grid2D, 2))
+  p7 = heatmap(magneticfield(grid2D, 3))
+  p8 = heatmap(Bexpected)
+  plot(p1, p2, p3, p4, p5, p6, p7, p8; layout = (@layout [a b c d; e f g h]))
   @show i
-end every 2
+end every 8
 show(to)
