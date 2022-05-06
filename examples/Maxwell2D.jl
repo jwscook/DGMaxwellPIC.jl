@@ -4,9 +4,9 @@ const NX = 32;
 const NY = 8;
 
 const OX = 3;
-const OY = 3;
+const OY = 5;
 
-const state2D = State([OX, OY], LegendreNodes);
+const state2D = State([OX, OY], LobattoNodes);
 
 const DIMS = 2
 const L = [NX, NY] .* 2;
@@ -37,8 +37,8 @@ const upwind = 1
 
 @show "Assembling"
 const M = assemble(grid2D, upwind=upwind);
-#@show "Building Crank-Nicolson"
-#const A = (I - M * dt / 2) \ Matrix(I + M * dt / 2);
+@show "Building Crank-Nicolson"
+const A = (I - M * dt / 2) \ Matrix(I + M * dt / 2);
 #@show "Calcuating sources"
 #const S = sources(grid2D);
 @show "Fetching dofs vector"
@@ -61,9 +61,9 @@ function substep!(y, w, A, u, k, a)
 end
 @gif for i in 1:NI
   @timeit to "k1 =" mul!(k1, M, u)
-  @timeit to "k4 =" substep!(k2, work, M, u, k1, dt/2)
-  @timeit to "k4 =" substep!(k3, work, M, u, k2, dt/2)
-  @timeit to "k4 =" substep!(k4, work, M, u, k2, dt)
+  @timeit to "k2 =" substep!(k2, work, M, u, k1, dt/2)
+  @timeit to "k3 =" substep!(k3, work, M, u, k2, dt/2)
+  @timeit to "k4 =" substep!(k4, work, M, u, k3, dt)
   @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
   #@timeit to "u .= A * u" u .= A * u
   @timeit to "dofs!" dofs!(grid2D, u)

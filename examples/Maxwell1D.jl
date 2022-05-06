@@ -1,14 +1,14 @@
-using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra, LoopVectorization
+using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra, LoopVectorization, SparseArrays
 
 const NX = 64;
 
-const OX = 5;
+const OX = 3;
 
-#const state1D = State([OX], LobattoNodes);
-const state1D = State([OX], LegendreNodes);
+const state1D = State([OX], LobattoNodes);
+#const state1D = State([OX], LegendreNodes);
 
 const DIMS = 1
-const L = 2 * NX#sqrt(2) * 10
+const L = sqrt(2) * 10 #2NX#
 
 const a = zeros(DIMS);
 const b = ones(DIMS) .* L;
@@ -17,6 +17,12 @@ const area = prod(b .- a)
 gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
 
 const grid1D = Grid([Cell(deepcopy(state1D), gridposition((i-1)/NX), gridposition(i/NX)) for i in 1:NX]);
+
+#outputA = spzeros((DGMaxwellPIC.ndofs(grid1D) .* (1, 1))...)
+#outputB = spzeros((DGMaxwellPIC.ndofs(grid1D) .* (1, 1))...)
+#DGMaxwellPIC.surfacefluxstiffnessmatrix!(outputA, grid1D, 1)
+#DGMaxwellPIC._surfacefluxstiffnessmatrix!(outputB, grid1D, 1)
+#@assert all(Matrix(outputA) .≈ Matrix(outputB))
 
 const s0 = DGMaxwellPIC.speedoflight
 const k = 4pi / L
@@ -42,13 +48,13 @@ const upwind = 1
 # u1 = (1 - dt/2 * a)^-1 (1 + dt/2 * a) * u0
 
 const M = assemble(grid1D, upwind=upwind);
-const C = M * dt;
-const Acranknicolson = (I - C * 0.5) \ Matrix(I + C * 0.5);
-
-const Aforwardeuler = I + M * dt;
-const Aalmostcranknicolson = (I - C * 0.6) \ Matrix(I + C * 0.4);
-const Abackwardeuler = inv(Matrix(I - C))
-
+#const C = M * dt;
+#const Acranknicolson = (I - C * 0.5) \ Matrix(I + C * 0.5);
+#
+#const Aforwardeuler = I + M * dt;
+#const Aalmostcranknicolson = (I - C * 0.6) \ Matrix(I + C * 0.4);
+#const Abackwardeuler = inv(Matrix(I - C))
+#
 # du/dt = a * u
 # u1 - u0 = dt * (a * u)
 # u1 - u0 = dt * (a * u1)
@@ -58,7 +64,7 @@ const Abackwardeuler = inv(Matrix(I - C))
 #
 #const Abackwardeuler = inv(I - C);
 #
-const A = Acranknicolson
+#const A = Acranknicolson
 #const A = Aalmostcranknicolson
 #const A = Aforwardeuler
 #const A = Abackwardeuler
@@ -69,7 +75,7 @@ const u = dofs(grid1D);
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 
-const nturns = 2
+const nturns = 1
 const NI = Int(ceil(nturns * L / s0 / dt))
 const k1 = deepcopy(u)
 const k2 = deepcopy(u)
@@ -85,9 +91,9 @@ function substep!(y, w, A, u, k, a)
 end
 @gif for i in 1:NI
   @timeit to "k1 =" mul!(k1, M, u)
-  @timeit to "k4 =" substep!(k2, work, M, u, k1, dt/2)
-  @timeit to "k4 =" substep!(k3, work, M, u, k2, dt/2)
-  @timeit to "k4 =" substep!(k4, work, M, u, k2, dt)
+  @timeit to "k2 =" substep!(k2, work, M, u, k1, dt/2)
+  @timeit to "k3 =" substep!(k3, work, M, u, k2, dt/2)
+  @timeit to "k4 =" substep!(k4, work, M, u, k3, dt)
   @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
   #@timeit to "u .= A * u" u .= A * u
   @timeit to "dofs!" dofs!(grid1D, u)
