@@ -48,7 +48,7 @@ const upwind = 1
 # (1 - dt/2 * a)*u1 = (1 + dt/2 * a) * u0
 # u1 = (1 - dt/2 * a)^-1 (1 + dt/2 * a) * u0
 
-const M = assemble(grid1D, upwind=upwind);
+const M = deepcopy(assemble(grid1D, upwind=upwind));
 #const C = M * dt;
 #const Acranknicolson = (I - C * 0.5) \ Matrix(I + C * 0.5);
 #
@@ -71,7 +71,6 @@ const M = assemble(grid1D, upwind=upwind);
 #const A = Abackwardeuler
 
 const S = sources(grid1D);
-const u = dofs(grid1D);
 
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
@@ -79,6 +78,7 @@ const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 const ngifevery = 16
 const nturns = 1
 const NI = Int(ceil(nturns * L / s0 / dt))
+const u = deepcopy(dofs(grid1D));
 const k1 = deepcopy(u)
 const k2 = deepcopy(u)
 const k3 = deepcopy(u)
@@ -89,15 +89,9 @@ function substep!(y, w, A, u, k, a)
   @tturbo for i in eachindex(y)
     w[i] = u[i] + k[i] * a
   end
-  #@tturbo for i in axes(A, 1)
-  #  yi = zero(eltype(y))
-  #  for k in axes(A, 2)
-  #    yi += A[i,k] * w[k]
-  #  end
-  #  y[i] = yi
-  #end
   mul!(y, A, w)
 end
+
 @gif for i in 1:NI
   @timeit to "k1 =" mul!(k1, M, u)
   @timeit to "k2 =" substep!(k2, work, M, u, k1, dt/2)
@@ -105,12 +99,12 @@ end
   @timeit to "k4 =" substep!(k4, work, M, u, k3, dt)
   @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
   #@timeit to "u .= A * u" u .= A * u
-  if i % ngifevery == 1
+  if i % ngifevery == 1 # only do this if we need to make plots
     @timeit to "dofs!" dofs!(grid1D, u)
   end
   t = i * dt
-  p1 = plot(x, electricfield(grid1D, 1), ylims=[-s0,s0]); title!("$i of $NI")
-  p2 = plot(x, electricfield(grid1D, 2), ylims=[-s0,s0])
+  p1 = plot(x, electricfield(grid1D, 1), ylims=[-s0,s0])
+  p2 = plot(x, electricfield(grid1D, 2), ylims=[-s0,s0]); title!("$i of $NI")
   p3 = plot(x, electricfield(grid1D, 3), ylims=[-s0,s0])
   p4 = plot(x, magneticfield(grid1D, 1), ylims=[-1,1])
   p5 = plot(x, magneticfield(grid1D, 2), ylims=[-1,1])

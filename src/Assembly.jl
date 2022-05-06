@@ -113,7 +113,6 @@ function surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N,
                   (@view ijv.J[1:ijv.index[]]),
                   (@view ijv.V[1:ijv.index[]]),
                   ndofs(g), ndofs(g))
-    #term ./= jacobian(g[cartindex]) # extra correction factor?! TODO - fix
     output .+= term
   end
   return output
@@ -149,10 +148,9 @@ function volumefluxstiffnessmatrix(cell::Cell{N,T}) where {N,T}
   nodes = NDimNodes(dofshape(cell), T)
   output = zeros(ndofs(cell), ndofs(cell))
   nc = ndofs(cell, 1) # number of dofs per component
-  J = jacobian(cell)
-  lumm = lu(kron(I(6), massmatrix(nodes) * J))
+  lumm = lu(kron(I(6), massmatrix(nodes) * jacobian(cell)))
   for dim in 1:N
-    fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * J
+    fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell; ignore=dim)
     fm = fluxmatrix(Val(dim), fmm)
     @views output[1:3nc, 3nc+1:6nc] .-= fm .* speedoflight^2
     @views output[3nc+1:6nc, 1:3nc] .+= fm
@@ -164,10 +162,7 @@ end
 function volumefluxstiffnessmatrix!(output, g::Grid{N,T}) where {N,T}
   for i in CartesianIndices(g.data)
     cellindices = indices(g, Tuple(i))
-    cell = g[i]
-    term = volumefluxstiffnessmatrix(cell)
-    term ./= jacobian(cell) # extra correction factor?! TODO - fix
-    @views output[cellindices, cellindices] .+= term
+    @views output[cellindices, cellindices] .+= volumefluxstiffnessmatrix(g[i])
   end
   return output 
 end
