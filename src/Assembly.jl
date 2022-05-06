@@ -104,20 +104,22 @@ function surfacefluxstiffnessmatrix!(ijv::SparseIJV, g::Grid{N,T}, cellindex::Tu
   end
 end
 
-function _surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N,T}
+function surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N,T}
   nnzs = (Int(round(ndofs(g) / length(g))))^2 * 5N # dumb & likely massive over-estimate of nonzeros
   ijv = SparseIJV(nnzs, Float64)
   for cartindex in CartesianIndices(g.data)
     surfacefluxstiffnessmatrix!(ijv, g, Tuple(cartindex), upwind)
-    output += sparse((@view ijv.I[1:ijv.index[]]),
-                     (@view ijv.J[1:ijv.index[]]),
-                     (@view ijv.V[1:ijv.index[]]),
-                      ndofs(g), ndofs(g))
+    term = sparse((@view ijv.I[1:ijv.index[]]),
+                  (@view ijv.J[1:ijv.index[]]),
+                  (@view ijv.V[1:ijv.index[]]),
+                  ndofs(g), ndofs(g))
+    #term ./= jacobian(g[cartindex]) # extra correction factor?! TODO - fix
+    output .+= term
   end
   return output
 end
 
-function surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N,T}
+function _surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N,T}
   for cartindex in CartesianIndices(g.data)
     cellindex = Tuple(cartindex)
     cell = g[cartindex]
@@ -143,7 +145,8 @@ function surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N,
   return output
 end
 
-function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
+function volumefluxstiffnessmatrix(cell::Cell{N,T}) where {N,T}
+  nodes = NDimNodes(dofshape(cell), T)
   output = zeros(ndofs(cell), ndofs(cell))
   nc = ndofs(cell, 1) # number of dofs per component
   J = jacobian(cell)
@@ -161,8 +164,10 @@ end
 function volumefluxstiffnessmatrix!(output, g::Grid{N,T}) where {N,T}
   for i in CartesianIndices(g.data)
     cellindices = indices(g, Tuple(i))
-    nodes = NDimNodes(dofshape(g[i]), T)
-    @views output[cellindices, cellindices] .+= volumefluxstiffnessmatrix(g[i], nodes)
+    cell = g[i]
+    term = volumefluxstiffnessmatrix(cell)
+    term ./= jacobian(cell) # extra correction factor?! TODO - fix
+    @views output[cellindices, cellindices] .+= term
   end
   return output 
 end
@@ -172,7 +177,6 @@ function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
   output = spzeros(n,n)
   volumefluxstiffnessmatrix!(output, g)
   surfacefluxstiffnessmatrix!(output, g, upwind)
-#  output .*= numelements(g) / volume(g) * 2^N # TODO - work out where the wrong is is that this wrong cancels out
   return output
 end
 

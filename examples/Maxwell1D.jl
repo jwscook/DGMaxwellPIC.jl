@@ -2,13 +2,14 @@ using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra, LoopVector
 
 const NX = 64;
 
-const OX = 3;
+const OX = 5;
 
-const state1D = State([OX], LobattoNodes);
-#const state1D = State([OX], LegendreNodes);
+#const state1D = State([OX], LobattoNodes);
+const state1D = State([OX], LegendreNodes);
 
 const DIMS = 1
-const L = sqrt(2) * 10 #2NX#
+const L = 2NX * rand()#
+
 
 const a = zeros(DIMS);
 const b = ones(DIMS) .* L;
@@ -37,7 +38,7 @@ magneticfield!(grid1D, fBz, 3);
 #DGMaxwellPIC.magneticfielddofs!(grid1D, 1.0, 3);
 
 const dtc = minimum((b .- a)./NX./OX) / s0
-const dt = dtc * 0.25
+const dt = dtc * 0.1
 const upwind = 1
 
 # du/dt = a * u
@@ -75,6 +76,7 @@ const u = dofs(grid1D);
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 
+const ngifevery = 16
 const nturns = 1
 const NI = Int(ceil(nturns * L / s0 / dt))
 const k1 = deepcopy(u)
@@ -87,6 +89,13 @@ function substep!(y, w, A, u, k, a)
   @tturbo for i in eachindex(y)
     w[i] = u[i] + k[i] * a
   end
+  #@tturbo for i in axes(A, 1)
+  #  yi = zero(eltype(y))
+  #  for k in axes(A, 2)
+  #    yi += A[i,k] * w[k]
+  #  end
+  #  y[i] = yi
+  #end
   mul!(y, A, w)
 end
 @gif for i in 1:NI
@@ -96,7 +105,9 @@ end
   @timeit to "k4 =" substep!(k4, work, M, u, k3, dt)
   @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
   #@timeit to "u .= A * u" u .= A * u
-  @timeit to "dofs!" dofs!(grid1D, u)
+  if i % ngifevery == 1
+    @timeit to "dofs!" dofs!(grid1D, u)
+  end
   t = i * dt
   p1 = plot(x, electricfield(grid1D, 1), ylims=[-s0,s0]); title!("$i of $NI")
   p2 = plot(x, electricfield(grid1D, 2), ylims=[-s0,s0])
@@ -110,5 +121,5 @@ end
   plot!(p6, x, [fBz([xi], t) - magneticfield(grid1D, [xi], 3) for xi in x], ylims=[-1,1])
   plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   @show i, i * dt * s0
-end every 8
+end every ngifevery
 show(to)
