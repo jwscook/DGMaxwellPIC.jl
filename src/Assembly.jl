@@ -44,97 +44,107 @@ function surfacefluxstiffnessmatrix!(output, nodesi::NDimNodes, nodesj::NDimNode
   end
   return output
 end
-#
-#function surfacefluxstiffnessmatrix!(II, JJ, VV, g::Grid{N,T}, cellindex::Tuple,
-#    upwind=0.0) where {N,T}
-#  cell = g[cellindex...]
-#  nodesi = NDimNodes(dofshape(cell), T)
-#  celldofindices = indices(g, cellindex)
-#  lumm = lu(kron(I(6), massmatrix(cell)))
-#
-#  count = 0
-#  for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
-#    flux = surfacefluxstiffnessmatrix(nodesi, nodesi, side, side, dim, upwind)
-#    flux .*= jacobian(cell; ignore=dim) * factor
-#    ldiv!(lumm, flux)
-#    for (c, ij) in enumerate(CartesianIndices((celldofindices, celldofindices)))
-#      i, j = Tuple(ij)
-#      count += 1
-#      II[count] = i
-#      JJ[count] = j
-#      VV[count] = -flux[c]
-#    end
-#
-#    neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
-#    neighbourcell = g[neighbourcellgridindex...]
-#    nodesj = NDimNodes(dofshape(neighbourcell), T)
-#    flux = surfacefluxstiffnessmatrix(nodesi, nodesj, side, opposite(side), dim, upwind)
-#    flux .*= jacobian(cell; ignore=dim) * factor
-#    ldiv!(lumm, flux)
-#
-#    neighbourdofindices = indices(g, neighbourcellgridindex)
-#    for (c, ij) in enumerate(CartesianIndices((celldofindices, neighbourdofindices)))
-#      i, j = Tuple(ij)
-#      count += 1
-#      II[count] = i
-#      JJ[count] = j
-#      VV[count] = flux[c]
-#    end
-#  end
-#  return (II, JJ, VV)
-#end
-#
-#function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
-#  output = spzeros(ndofs(g), ndofs(g))
-#  n = (ndofs(g) / length(g))^2 * 5N
-#  # dumb estimate of nonzeros
-#  II = zeros(Int64, n)
-#  JJ = zeros(Int64, n)
-#  VV = zeros(Float64, n)
-#  for cartindex in CartesianIndices(g.data)
-#    fill!(II, 0)
-#    fill!(JJ, 0)
-#    fill!(VV, 0)
-#    surfacefluxstiffnessmatrix!(II, JJ, VV, g, Tuple(cartindex), upwind)
-#    for i in eachindex(II)
-#      II[i] == 0 && continue
-#      JJ[i] == 0 && continue
-#      output[II[i], JJ[i]] = VV[i]
-#    end
-#  end
-#  return output
-#end
-#
-#
-#
+
+struct SparseIJV{T}
+  I::Vector{Int}
+  J::Vector{Int}
+  V::Vector{T}
+  index::Ref{Int}
+  length::Ref{Int}
+end
+SparseIJV(II, JJ, VV) = SparseIJV(II, JJ, VV, Ref(0), Ref(length(II)))
+SparseIJV(n::Int, ::Type{T}) where  T = SparseIJV(zeros(Int, n), zeros(Int, n), zeros(T, n))
+function Base.setindex!(s::SparseIJV{T}, ij::Tuple, v::T) where {T}
+  s.index[] += 1
+  if s.index[] > s.length[]
+    s.length[] *= 2
+    resize!(s.II, s.length[])
+    resize!(s.JJ, s.length[])
+    resize!(s.VV, s.length[])
+  end
+  s.I[s.index[]] = ij[1]
+  s.J[s.index[]] = ij[2]
+  s.V[s.index[]] = v
+end
+function Base.setindex!(s::SparseIJV{T}, is, js, vs::AbstractArray{T}) where {T}
+  for (c, ij) in enumerate(CartesianIndices((is, js)))
+    setindex!(s, Tuple(ij), vs[c])
+  end
+end
+function zero!(s::SparseIJV)
+  s.index[] = 0
+  fill!(s.I, 0)
+  fill!(s.J, 0)
+  fill!(s.V, 0)
+end
+
+function surfacefluxstiffnessmatrix!(ijv::SparseIJV, g::Grid{N,T}, cellindex::Tuple,
+    upwind=0.0) where {N,T}
+  zero!(ijv)
+  cell = g[cellindex...]
+  nodesi = NDimNodes(dofshape(cell), T)
+  celldofindices = indices(g, cellindex)
+  lumm = lu(kron(I(6), massmatrix(cell)))
+
+  for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
+    flux = surfacefluxstiffnessmatrix(nodesi, nodesi, side, side, dim, upwind)
+    flux .*= -jacobian(cell; ignore=dim) * factor
+    ldiv!(lumm, flux)
+    setindex!(ijv, celldofindices, celldofindices, flux)
+
+    neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
+    neighbourcell = g[neighbourcellgridindex...]
+    nodesj = NDimNodes(dofshape(neighbourcell), T)
+    flux = surfacefluxstiffnessmatrix(nodesi, nodesj, side, opposite(side), dim, upwind)
+    flux .*= jacobian(cell; ignore=dim) * factor
+    ldiv!(lumm, flux)
+
+    neighbourdofindices = indices(g, neighbourcellgridindex)
+    setindex!(ijv, celldofindices, neighbourdofindices, flux)
+  end
+end
 
 function surfacefluxstiffnessmatrix(g::Grid{N,T}, upwind=0.0) where {N,T}
   output = spzeros(ndofs(g), ndofs(g))
+  nnzs = (Int(round(ndofs(g) / length(g))))^2 * 5N # dumb & likely massive over-estimate of nonzeros
+  ijv = SparseIJV(nnzs, Float64)
   for cartindex in CartesianIndices(g.data)
-    cellindex = Tuple(cartindex)
-    cell = g[cartindex]
-    nodesi = NDimNodes(dofshape(cell), T)
-    celldofindices = indices(g, cellindex)
-    lumm = lu(kron(I(6), massmatrix(cell)))
-    for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
-      flux = surfacefluxstiffnessmatrix(nodesi, nodesi, side, side, dim, upwind)
-      flux .*= jacobian(cell; ignore=dim)
-      @views output[celldofindices, celldofindices] .-= flux .* factor
-
-      neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
-      neighbourcell = g[neighbourcellgridindex...]
-      nodesj = NDimNodes(dofshape(neighbourcell), T)
-      flux = surfacefluxstiffnessmatrix(nodesi, nodesj, side, opposite(side), dim, upwind)
-      flux .*= jacobian(cell; ignore=dim)
-      ldiv!(lumm, flux)
-
-      neighbourdofindices = indices(g, neighbourcellgridindex)
-      @views output[celldofindices, neighbourdofindices] .+= flux .* factor
-    end
-    @views output[celldofindices, celldofindices] .= lumm \ output[celldofindices, celldofindices]
+    surfacefluxstiffnessmatrix!(ijv, g, Tuple(cartindex), upwind)
+    output += sparse((@view ijv.I[1:ijv.index[]]),
+                     (@view ijv.J[1:ijv.index[]]),
+                     (@view ijv.V[1:ijv.index[]]),
+                      ndofs(g), ndofs(g))
   end
   return output
 end
+
+#function surfacefluxstiffnessmatrix_slower(g::Grid{N,T}, upwind=0.0) where {N,T}
+#  output = spzeros(ndofs(g), ndofs(g))
+#  for cartindex in CartesianIndices(g.data)
+#    cellindex = Tuple(cartindex)
+#    cell = g[cartindex]
+#    nodesi = NDimNodes(dofshape(cell), T)
+#    celldofindices = indices(g, cellindex)
+#    lumm = lu(kron(I(6), massmatrix(cell)))
+#    for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
+#      flux = surfacefluxstiffnessmatrix(nodesi, nodesi, side, side, dim, upwind)
+#      flux .*= jacobian(cell; ignore=dim)
+#      @views output[celldofindices, celldofindices] .-= flux .* factor
+#
+#      neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
+#      neighbourcell = g[neighbourcellgridindex...]
+#      nodesj = NDimNodes(dofshape(neighbourcell), T)
+#      flux = surfacefluxstiffnessmatrix(nodesi, nodesj, side, opposite(side), dim, upwind)
+#      flux .*= jacobian(cell; ignore=dim)
+#      ldiv!(lumm, flux)
+#
+#      neighbourdofindices = indices(g, neighbourcellgridindex)
+#      @views output[celldofindices, neighbourdofindices] .+= flux .* factor
+#    end
+#    @views output[celldofindices, celldofindices] .= lumm \ output[celldofindices, celldofindices]
+#  end
+#  return output
+#end
 
 function volumefluxstiffnessmatrix(cell::Cell{N}, nodes::NDimNodes) where {N}
   output = zeros(ndofs(cell), ndofs(cell))
