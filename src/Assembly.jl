@@ -32,12 +32,6 @@ function zero!(s::SparseIJV)
   fill!(s.V, 0)
 end
 
-
-@memoize function indices(g::Grid{N,T}, cellindices) where {N,T,F}
-  # TODO fix need to index by cellindices... i.e. with splat
-  return (1:ndofs(g[cellindices...])) .+ offsetindex(g, cellindices)
-end
-
 function findneighbourgridindex(g::Grid{N}, homeindex, searchdir, side) where N
   gridsize = size(g)
   return [mod1(homeindex[j] + (searchdir == j) * ((side == Low) ? -1 : 1), gridsize[j]) for j in 1:N]
@@ -81,7 +75,8 @@ function surfacefluxstiffnessmatrix!(ijv::SparseIJV, g::Grid{N,T}, cellindex::Tu
   cell = g[cellindex...]
   nodesi = NDimNodes(dofshape(cell), T)
   celldofindices = indices(g, cellindex)
-  lumm = lu(kron(I(6), massmatrix(cell)))
+#  lumm = lu(kron(I(6), massmatrix(cell)))
+  lumm = lumassmatrix!(g, cell)
 
   fluxii = zeros(6ndofs(nodesi), 6ndofs(nodesi))
 
@@ -125,7 +120,8 @@ function _surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N
     nodesi = NDimNodes(dofshape(cell), T)
     flux = zeros(6ndofs(nodesi), 6ndofs(nodesi))
     celldofindices = indices(g, cellindex)
-    lumm = lu(kron(I(6), massmatrix(cell)))
+    #lumm = lu(kron(I(6), massmatrix(cell)))
+    lumm = lumassmatrix!(g, cell)
     for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
       surfacefluxstiffnessmatrix!(flux, nodesi, nodesi, side, side, dim, upwind)
       flux .*= jacobian(cell; ignore=dim)
@@ -144,11 +140,11 @@ function _surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N
   return output
 end
 
-function volumefluxstiffnessmatrix(cell::Cell{N,T}) where {N,T}
+function volumefluxstiffnessmatrix(cell::Cell{N,T}, lumm) where {N,T}
   nodes = NDimNodes(dofshape(cell), T)
   output = zeros(ndofs(cell), ndofs(cell))
   nc = ndofs(cell, 1) # number of dofs per component
-  lumm = lu(kron(I(6), massmatrix(nodes) * jacobian(cell)))
+  #lumm = lu(kron(I(6), massmatrix(nodes) * jacobian(cell)))
   for dim in 1:N
     fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell; ignore=dim)
     fm = fluxmatrix(Val(dim), fmm)
@@ -162,7 +158,9 @@ end
 function volumefluxstiffnessmatrix!(output, g::Grid{N,T}) where {N,T}
   for i in CartesianIndices(g.data)
     cellindices = indices(g, Tuple(i))
-    @views output[cellindices, cellindices] .+= volumefluxstiffnessmatrix(g[i])
+    cell = g[i]
+    lumm = lumassmatrix!(g, cell)
+    @views output[cellindices, cellindices] .+= volumefluxstiffnessmatrix(cell, lumm)
   end
   return output 
 end
@@ -174,6 +172,5 @@ function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
   surfacefluxstiffnessmatrix!(output, g, upwind)
   return output
 end
-
 
 

@@ -4,11 +4,19 @@ abstract type AbstractParticleSampler end
 struct ParticleData{N, T<:AbstractArray}
   data::T # X, V, W (N positions, 3 velocities, 1 weight)
   cellids::Vector{Int64}
-  work::Vector{Int64}
+  perm::Vector{Int64}
+  id::Vector{Int64}
+  work1::Matrix{Float64}
+  work2::Matrix{Float64}
   function ParticleData(data::Array{T,2}) where {T}
-    @assert size(data, 2) > 0
+    npart = size(data, 2)
+    @assert npart > 0
     return new{size(data, 1) - 4, typeof(data)}(data,
-      zeros(Int64, size(data, 2)), zeros(Int64, size(data, 2)))
+      zeros(Int64, npart),
+      zeros(Int64, npart),
+      collect(1:npart),
+      zeros(Float64, 3, npart),
+      zeros(Float64, 3, npart))
   end
 end
 
@@ -25,16 +33,22 @@ function Base.sort!(p::ParticleData, g::Grid)
   ub = upper(g)
   sg = size(g)
   linear = LinearIndices(sg)
-  for i in 1:size(p.data, 2)
+  @threads for i in 1:size(p.data, 2)
     index = cellid(g, (@view x[:, i]))
-    @assert !isnothing(index)
-    p.cellids[i] = linear[index]
+    @assert !isnothing(index) "$lb, $(x[:, i]), $ub"
+    p.cellids[i] = linear[index...]
     @assert 0 < p.cellids[i] <= length(g)
   end
-  sortperm!(p.work, p.cellids)
-  @views p.data .= p.data[:, p.work]
-  @views p.cellids .= p.cellids[p.work]
-  @views p.work .= p.work[p.work]
+  sortperm!(p.perm, p.cellids)
+  #@views p.data .= p.data[:, p.perm]
+  #p.cellids .= p.cellids[p.perm]
+  #p.id .= p.id[p.perm]
+  t1 = @spawn (@views p.data .= p.data[:, p.perm])
+  t2 = @spawn (p.cellids .= p.cellids[p.perm])
+  t3 = @spawn (p.id .= p.id[p.perm])
+  wait(t1)
+  wait(t2)
+  wait(t3)
   return p
 end
 
@@ -42,6 +56,7 @@ position(p::ParticleData{N}, i::Integer) where {N} = p.data[1:N, i]
 velocity(p::ParticleData{N}, i::Integer) where {N} = p.data[N+1:N+3, i]
 weight(p::ParticleData{N}, i::Integer) where {N} = p.data[N+4, i]
 cellids(p::ParticleData) = p.cellids
+ids(p::ParticleData) = p.id
 
 position!(p::ParticleData{N}, x, i::Integer) where {N} = (p.data[1:N, i] .= x; p)
 velocity!(p::ParticleData{N}, v, i::Integer) where {N} = (p.data[N+1:N+3, i] .= v; p)

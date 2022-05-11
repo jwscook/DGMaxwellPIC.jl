@@ -1,17 +1,16 @@
 
 
-function borispush!(x, v, qE_m, qB_m, dt)
-  v⁻ = @. v + qE_m * dt / 2
-  v¹ = v⁻ .+ (cross(v⁻ .+ cross(v⁻, qB_m) * dt / 2, qB_m) ./ (1 + sum(z->z^2, qB_m) * dt^2 / 4) .+ qE_m / 2) * dt
-  for i in eachindex(x)
-    x[i] += (v[i] + v¹[i]) * dt / 2
-  end
-  @. v = v¹
+function borispush!(x::AbstractVector{T}, v::AbstractVector{T}, qE_m, qB_m, dt, ::Val{N}) where {T, N}
+  dt_2 = dt / 2
+  v⁻ = SVector{3, T}(v) + SVector{3, T}(qE_m) * dt_2
+  v⁻×qB_m = cross(v⁻, SVector{3, T}(qB_m))
+  denom = (1 + sum(abs2, qB_m) * dt_2^2)
+  v .= v⁻ .+ (cross(v⁻ .+ v⁻×qB_m * dt_2, qB_m) ./ denom .+ qE_m ./ 2) .* dt
   return nothing
 end
 
 function advect!(x, v, dt)
-  for i in eachindex(x)
+  @inbounds for i in eachindex(x)
     x[i] += v[i] * dt
   end
 end

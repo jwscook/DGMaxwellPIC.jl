@@ -9,6 +9,7 @@ using HaltonSequences
 using HCubature
 using LazyArrays
 using LinearAlgebra
+using LoopVectorization
 #using Memoize
 using Memoization
 using OffsetArrays
@@ -46,7 +47,7 @@ export electricfield!, magneticfield!, currentfield!, chargefield!
 export facedofindices, dofs, dofs!, currentdofs
 export assemble
 export depositcurrent!
-export sources
+export sources, sources!
 export Species, weight!
 export Plasma, advance!
 

@@ -16,20 +16,6 @@ function facedofindices(nodes::NDimNodes, dim::Int, side::FaceDirection)
   end
 end
 
-@memoize function offsetindex(g::Grid{N,T}, cellindices) where {N,T,F}
-  tcellindices = Tuple(cellindices)
-  @assert all(1 <= tcellindices[i] <= size(g.data, i) for i in eachindex(tcellindices))
-  offset = 0
-  for i in CartesianIndices(g.data)
-    if all(j->isequal(j...), zip(tcellindices, Tuple(i))) # i == cellindices
-      return offset
-    end
-    offset += ndofs(g[i]) # not the cell we want so count up all the number of dofs in the offset
-  end
-  throw(ErrorException("Shouldn't be able to get here"))
-end
-
-
 # should these belong here?
 for (fname, rnge) in ((:ndofs, 1:6), (:currentndofs, 7:9), (:totalndofs, 1:10))
   @eval $(fname)(u::State) = sum(prod(size(u.q[i])) for i in $(rnge))
@@ -68,15 +54,5 @@ function dofs!(grid::Grid, x::AbstractArray)
     dofs!(cell, (@view x[indices(grid, Tuple(i))]))
   end
   return grid
-end
-
-function currentsource(grid::Grid)
-  output = zeros(ndofs(grid))
-  for i in CartesianIndices(grid.data)
-    cell = grid[i]
-    inds = offsetindex(grid, i) .+ electricfieldindices(cell)
-    output[inds] .= currentdofs(cell)
-  end
-  return output
 end
 

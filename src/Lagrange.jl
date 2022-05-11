@@ -1,7 +1,7 @@
 
 abstract type BasisFunctionType end
-abstract type AbstractLagrangeNodes{T} <: BasisFunctionType end
-abstract type AbstractOrthogLagrangeNodes{T} <: AbstractLagrangeNodes{T} end
+abstract type AbstractLagrangeNodes <: BasisFunctionType end
+abstract type AbstractOrthogLagrangeNodes <: AbstractLagrangeNodes end
 
 abstract type MaybeSolveDofs end
 struct DelayDofsSolve <: MaybeSolveDofs end
@@ -13,15 +13,17 @@ opposite(_::SolveDofsNow) = DelayDofsSolve()
 for (stub, fname, orthog) in ((:Legendre, gausslegendre, true), (:Lobatto, gausslobatto, false))
   abstype = orthog ? :AbstractOrthogLagrangeNodes : :AbstractLagrangeNodes
   structname = Symbol(stub, :Nodes)
-  @eval struct $(structname){T} <: $(abstype){T}
-    nodes::Vector{T}
-    weights::Vector{T}
-    invdenominators::Vector{T}
+  @eval struct $(structname) <: $(abstype)
+    nodes::Vector{Float64}
+    weights::Vector{Float64}
+    invdenominators::Vector{Float64}
+    uniqueid::UInt64
   end
   @eval function $(structname)(N::Int)
     n, w = $(fname)(N)
     invdenominators = [mapreduce(j->isequal(i, j) ? one(eltype(n)) : (1 / (n[i] - n[j])), *, eachindex(n)) for i in eachindex(n)]
-    return $(structname)(n, w, invdenominators)
+    uniqueid = mapreduce(hash, hash, (n, w, invdenominators))
+    return $(structname)(n, w, invdenominators, uniqueid)
   end
 end
 function Base.isequal(a::AbstractLagrangeNodes, b::AbstractLagrangeNodes)
@@ -38,13 +40,16 @@ node(n::AbstractLagrangeNodes, i::Int) = n.nodes[i]
 weight(n::AbstractLagrangeNodes, i::Int) = n.weights[i]
 nodes(n::AbstractLagrangeNodes) = n.nodes
 weights(n::AbstractLagrangeNodes) = n.weights
-Base.eltype(n::AbstractLagrangeNodes{T}) where {T<:Number} = T
+uniqueid(n::AbstractLagrangeNodes) = n.uniqueid
+Base.eltype(n::AbstractLagrangeNodes) = Float64
 
-@concrete struct NDimNodes
-  nodes # Tuple of <:AbstractLagrangeNodes
+struct NDimNodes{N,T<:AbstractLagrangeNodes}
+  nodes::NTuple{N,T} # Tuple of <:AbstractLagrangeNodes
+  uniqueid::UInt64
 end
+NDimNodes(nodes) = NDimNodes(nodes, mapreduce(hash, hash, nodes))
 Base.size(n::NDimNodes) = Tuple(length(n.nodes[i]) for i in eachindex(n))
-Base.hash(n::NDimNodes) = mapreduce(hash, hash, n)
+Base.hash(n::NDimNodes) = n.uniqueid # mapreduce(hash, hash, n)
 ndofs(n::NDimNodes) = prod(length, n.nodes)
 
 _a(::Val{N}) where N = -(@SArray ones(N))
@@ -71,12 +76,11 @@ ndims(n::NDimNodes) = length(n.nodes)
 #evaluate one function without coefficient
 function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Number}
   T = promote_type(R, eltype(n))
-  output = n.invdenominators[ind] * one(T)
+  output = T(n.invdenominators[ind])
   @inbounds for j in eachindex(n)
-    j == ind && continue
-    output *= (x - node(n, j))
+    output *= j == ind ? T(1) : T(x - node(n, j))
   end
-  return output
+  return output::T
 end
 
 lagrange(x::Number, nodes::AbstractLagrangeNodes, ind::Integer) = nodes(x, ind)
@@ -84,7 +88,6 @@ lagrange(x::Number, nodes::AbstractLagrangeNodes, ind::Integer, coeff::Number) =
 
 #evaluate one cartesian product of functions for one coefficient
 function lagrange(x, nodes::NDimNodes, inds, coeff::T) where {T<:Number}
-  #return prod(lagrange(x[i], nodes[i], inds[i]) for i in 1:length(x)) * coeff
   @assert length(x) == ndims(nodes)
   output = coeff
   @inbounds for i in 1:ndims(nodes)
@@ -96,8 +99,7 @@ end
 # evaluate all functions with all coefficients
 function lagrange(x, nodes::NDimNodes, dofs)
   output = zero(promote_type(eltype(x), eltype(dofs)))
-  for i in CartesianIndices(dofs)
-    t = Tuple(i)
+  @inbounds for i in CartesianIndices(dofs)
     output += lagrange(x, nodes, Tuple(i), dofs[i])
   end
   return output
@@ -139,8 +141,7 @@ function lagrange!(dofs, nodes::NDimNodes, f::F,
   a, b = _a(nodes), _b(nodes)
   @assert size(dofs) == Tuple(length(n) for n in nodes)
   for i in CartesianIndices(dofs)
-    t = Tuple(i)
-    dofs[i] = HCubature.hcubature(x->f(x) * lagrange(x, nodes, t, 1), a, b,
+    dofs[i] = HCubature.hcubature(x->f(x) * lagrange(x, nodes, Tuple(i), 1), a, b,
                                   atol=ATOL, rtol=sqrt(eps()))[1]
     #dofs[i] *= abs(dofs[i] > 100ATOL)
   end
@@ -157,7 +158,7 @@ function massmatrix(nodesi::T, nodesj::U,
   return output
 end
 function massmatrix(nodesi::T, nodesj::T
-    ) where {U, T<:AbstractOrthogLagrangeNodes{U}}
+    ) where {T<:AbstractOrthogLagrangeNodes}
   return Diagonal(deepcopy(weights(nodesi)))
 end
 
@@ -169,7 +170,6 @@ const massmatrixdictsdict = Dict{UInt64, Any}()
 function massmatrixdictionary(nodesi::NDimNodes, nodesj::NDimNodes)
   key = mapreduce(hash, hash, (nodesi, nodesj))
   haskey(massmatrixdictsdict, key) && return massmatrixdictsdict[key]
-  @info "Calling memoized massmatrixdictionary(...)"
   @assert length(nodesi) == length(nodesj)
   szi = Tuple(length(n) for n in nodesi)
   szj = Tuple(length(n) for n in nodesj)
@@ -308,10 +308,10 @@ end
 
 
 # derivative of the ind^th nodal lagrange function associated with nodes at position x
-function lagrangederiv(x::R, nodes::AbstractLagrangeNodes{T}, ind::Integer) where {R<:Real, T}
+function lagrangederiv(x::R, nodes::AbstractLagrangeNodes, ind::Integer) where {R<:Real}
   return sum(i-> 1 / (nodes[ind] - nodes[i]) *
     mapreduce(j->(x - nodes[j]) / (nodes[ind] - nodes[j]), *,
-              filter(j->!(j in (ind, i)), eachindex(nodes)); init=one(promote_type(R, T))),
+              filter(j->!(j in (ind, i)), eachindex(nodes)); init=one(promote_type(R, eltype(nodes)))),
     filter(i->!(i in ind), eachindex(nodes)))
 end
 

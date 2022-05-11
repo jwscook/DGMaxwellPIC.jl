@@ -19,12 +19,14 @@ end
 
 weight!(s::Species, numberdensity, grid) = weight!(s, numberdensity, lower(grid), upper(grid))
 
-for fname in (:position, :velocity, :weight, :xposition, :yposition, :zposition, :cellids)
+for fname in (:position, :velocity, :weight, :xposition, :yposition, :zposition, :xvelocity, :yvelocity, :zvelecity, :cellids)
   fname! = Symbol(fname, :!)
   @eval $(fname)(s::Species) = $(fname)(s.particledata)
   @eval $(fname)(s::Species, args...) = $(fname)(s.particledata, args...)
   @eval $(fname!)(s::Species) = $(fname!)(s.particledata)
   @eval $(fname!)(s::Species, args...) = $(fname!)(s.particledata, args...)
 end
+workarrays(s::Species) = (s.particledata.work1, s.particledata.work2)
+ids(s::Species) = ids(s.particledata)
 
 #current(s::Species) = velocity(s) .* s.charge .* weight(s)
