@@ -40,25 +40,22 @@ function Base.sort!(p::ParticleData{N}, g::Grid) where N
   sg = size(g)
   linear = LinearIndices(sg)
   @threads for i in 1:size(p.data, 2)
-  #for i in 1:size(p.data, 2)
     index = cellid(g, (@view x[:, i]))
-    @assert !isnothing(index) "$lb, $(x[:, i]), $ub"
+    @assert !isnothing(index)
     p.cellids[i] = linear[index...]
     @assert 0 < p.cellids[i] <= length(g)
   end
   sortperm!(p.perm, p.cellids)
   @threads for j in 1:size(p.data, 2)
-  #for j in 1:size(p.data, 2)
     permj = p.perm[j]
-    for i in 1:N
+    for i in axes(p.data, 1)
       p.workN31[i, j] = p.data[i, permj]
     end
     p.workint1[j] = p.cellids[permj]
     p.workint2[j] = p.id[permj]
   end
   @threads for j in 1:size(p.data, 2)
-  #for j in 1:size(p.data, 2)
-    for i in 1:N
+    for i in axes(p.data, 1)
       p.data[i, j] = p.workN31[i, j]
     end
     p.cellids[j] = p.workint1[j]

@@ -75,7 +75,6 @@ function surfacefluxstiffnessmatrix!(ijv::SparseIJV, g::Grid{N,T}, cellindex::Tu
   cell = g[cellindex...]
   nodesi = NDimNodes(dofshape(cell), T)
   celldofindices = indices(g, cellindex)
-#  lumm = lu(kron(I(6), massmatrix(cell)))
   lumm = lumassmatrix!(g, cell)
 
   fluxii = zeros(6ndofs(nodesi), 6ndofs(nodesi))
@@ -120,7 +119,6 @@ function _surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N
     nodesi = NDimNodes(dofshape(cell), T)
     flux = zeros(6ndofs(nodesi), 6ndofs(nodesi))
     celldofindices = indices(g, cellindex)
-    #lumm = lu(kron(I(6), massmatrix(cell)))
     lumm = lumassmatrix!(g, cell)
     for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
       surfacefluxstiffnessmatrix!(flux, nodesi, nodesi, side, side, dim, upwind)
@@ -144,7 +142,6 @@ function volumefluxstiffnessmatrix(cell::Cell{N,T}, lumm) where {N,T}
   nodes = NDimNodes(dofshape(cell), T)
   output = zeros(ndofs(cell), ndofs(cell))
   nc = ndofs(cell, 1) # number of dofs per component
-  #lumm = lu(kron(I(6), massmatrix(nodes) * jacobian(cell)))
   for dim in 1:N
     fmm = volumefluxstiffnessmatrix(nodes, nodes, dim) * jacobian(cell; ignore=dim)
     fm = fluxmatrix(Val(dim), fmm)

@@ -24,12 +24,12 @@ magneticfield!(grid2D, x->B, 3)
 const NP = 100 #NX * NY * OX * OY * 1
 
 const dataxvw = zeros(DIMS + 3 + 1, NP);
-dataxvw[1:DIMS, :] .= rand(DIMS, NP) .* (b .- a) .+ a # 0.5
-dataxvw[DIMS+1, :] .= randn(NP) / 3
-dataxvw[DIMS+2, :] .= randn(NP) / 3
-#θ = rand(NP) .* 2pi .- pi
-#dataxvw[DIMS+1, :] .= cos.(θ) / 10
-#dataxvw[DIMS+2, :] .= sin.(θ) / 10
+dataxvw[1:DIMS, :] .= 0.5 # rand(DIMS, NP) .* (b .- a) .+ a # 0.5
+#dataxvw[DIMS+1, :] .= randn(NP) / 3
+#dataxvw[DIMS+2, :] .= randn(NP) / 3
+θ = rand(NP) .* 2pi .- pi
+dataxvw[DIMS+1, :] .= cos.(θ) / 10
+dataxvw[DIMS+2, :] .= sin.(θ) / 10
 dataxvw[DIMS+3, :] .= randn(NP) / 3
 const particledata = DGMaxwellPIC.ParticleData(dataxvw);
 weight!(particledata, 32pi * area / length(particledata));

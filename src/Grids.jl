@@ -299,15 +299,15 @@ function cellcentres(g::Grid{N}) where {N}
   return output
 end
 
-function cellid(g::Grid{N}, x) where {N}
+function cellid(g::Grid{N}, x)::NTuple{N, Int64} where {N}
   lb = lower(g)
   ub = upper(g)
   sg = size(g)
-  index = NTuple{N, Int}(Int(ceil(sg[i] * (x[i] - lb[i])/(ub[i] - lb[i]))) for i in eachindex(x))
+  index = Tuple(Int(ceil(sg[i] * (x[i] - lb[i])/(ub[i] - lb[i]))) for i in eachindex(x))
   in(x, g[index...]) && return index
   for i in CartesianIndices(g.data)
     if in(x, g[i])
-      return Tuple{N, Int}(i)
+      return Tuple(i)
     end
   end
   throw(ErrorException("Shouldnt be able to get here: $lb, $x, $ub"))
