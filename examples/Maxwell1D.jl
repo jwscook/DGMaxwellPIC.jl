@@ -70,8 +70,6 @@ const M = deepcopy(assemble(grid1D, upwind=upwind));
 #const A = Aforwardeuler
 #const A = Abackwardeuler
 
-const S = sources(grid1D);
-
 const to = TimerOutput()
 const x = collect(1/NX/2:1/NX:1-1/NX/2) .* L
 
@@ -99,21 +97,21 @@ end
   @timeit to "k4 =" substep!(k4, work, M, u, k3, dt)
   @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
   #@timeit to "u .= A * u" u .= A * u
+  t = i * dt
   if i % ngifevery == 1 # only do this if we need to make plots
     @timeit to "dofs!" dofs!(grid1D, u)
+    p1 = plot(x, electricfield(grid1D, 1), ylims=[-s0,s0])
+    p2 = plot(x, electricfield(grid1D, 2), ylims=[-s0,s0]); title!("$i of $NI")
+    p3 = plot(x, electricfield(grid1D, 3), ylims=[-s0,s0])
+    p4 = plot(x, magneticfield(grid1D, 1), ylims=[-1,1])
+    p5 = plot(x, magneticfield(grid1D, 2), ylims=[-1,1])
+    p6 = plot(x, magneticfield(grid1D, 3), ylims=[-1,1])
+    plot!(p2, x, [fEy([xi], t) for xi in x], ylims=[-s0,s0])
+    plot!(p2, x, [fEy([xi], t) - electricfield(grid1D, [xi], 2) for xi in x], ylims=[-s0,s0])
+    plot!(p6, x, [fBz([xi], t) for xi in x], ylims=[-1,1])
+    plot!(p6, x, [fBz([xi], t) - magneticfield(grid1D, [xi], 3) for xi in x], ylims=[-1,1])
+    plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   end
-  t = i * dt
-  p1 = plot(x, electricfield(grid1D, 1), ylims=[-s0,s0])
-  p2 = plot(x, electricfield(grid1D, 2), ylims=[-s0,s0]); title!("$i of $NI")
-  p3 = plot(x, electricfield(grid1D, 3), ylims=[-s0,s0])
-  p4 = plot(x, magneticfield(grid1D, 1), ylims=[-1,1])
-  p5 = plot(x, magneticfield(grid1D, 2), ylims=[-1,1])
-  p6 = plot(x, magneticfield(grid1D, 3), ylims=[-1,1])
-  plot!(p2, x, [fEy([xi], t) for xi in x], ylims=[-s0,s0])
-  plot!(p2, x, [fEy([xi], t) - electricfield(grid1D, [xi], 2) for xi in x], ylims=[-s0,s0])
-  plot!(p6, x, [fBz([xi], t) for xi in x], ylims=[-1,1])
-  plot!(p6, x, [fBz([xi], t) - magneticfield(grid1D, [xi], 3) for xi in x], ylims=[-1,1])
-  plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
   @show i, i * dt * s0
 end every ngifevery
 show(to)

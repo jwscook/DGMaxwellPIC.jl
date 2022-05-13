@@ -46,11 +46,22 @@ Base.eltype(n::AbstractLagrangeNodes) = Float64
 struct NDimNodes{N,T<:AbstractLagrangeNodes}
   nodes::NTuple{N,T} # Tuple of <:AbstractLagrangeNodes
   uniqueid::UInt64
+  works::Vector{Array{Float64, N}}
+  lumm::LU{Float64, Matrix{Float64}}
+  function NDimNodes(nodes::NTuple{N,T}) where {N,T}
+    work = zeros(Float64, (length(n) for n in nodes)...)
+    works = [deepcopy(work) for i in 1:nthreads()]
+    fakelu = lu(rand(1,1))
+    uniqueid = mapreduce(hash, hash, nodes)
+    fakenew = new{N,T}(nodes, uniqueid, works, lu(ones(1,1)))
+    lumm = lu(massmatrix(fakenew, fakenew))
+    return new{N,T}(nodes, uniqueid, works, lumm)
+  end
 end
-NDimNodes(nodes) = NDimNodes(nodes, mapreduce(hash, hash, nodes))
 Base.size(n::NDimNodes) = Tuple(length(n.nodes[i]) for i in eachindex(n))
-Base.hash(n::NDimNodes) = n.uniqueid # mapreduce(hash, hash, n)
+Base.hash(n::NDimNodes) = n.uniqueid
 ndofs(n::NDimNodes) = prod(length, n.nodes)
+workarray(n::NDimNodes, tid) = n.works[tid]
 
 _a(::Val{N}) where N = -(@SArray ones(N))
 _b(::Val{N}) where N = @SArray ones(N)
@@ -83,27 +94,35 @@ function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Number}
   return output::T
 end
 
-lagrange(x::Number, nodes::AbstractLagrangeNodes, ind::Integer) = nodes(x, ind)
-lagrange(x::Number, nodes::AbstractLagrangeNodes, ind::Integer, coeff::Number) = nodes(x, ind) * coeff
+lagrange(x::Number, n::AbstractLagrangeNodes, ind::Integer) = n(x, ind)
+lagrange(x::Number, n::AbstractLagrangeNodes, ind::Integer, coeff::Number) = n(x, ind) * coeff
 
-#evaluate one cartesian product of functions for one coefficient
-function lagrange(x, nodes::NDimNodes, inds, coeff::T) where {T<:Number}
-  @assert length(x) == ndims(nodes)
-  output = coeff
-  @inbounds for i in 1:ndims(nodes)
-    output *= (nodes[i])(x[i], inds[i])
+function lagrange(x, nodes::NDimNodes, inds::NTuple{N,Integer}) where {N}
+  @assert length(x) == ndims(nodes) == N
+  output = nodes[1](x[1], inds[1])
+  for i in 2:ndims(nodes)
+    output *= nodes[i](x[i], inds[i])
   end
   return output
 end
 
-# evaluate all functions with all coefficients
-function lagrange(x, nodes::NDimNodes, dofs)
-  output = zero(promote_type(eltype(x), eltype(dofs)))
-  @inbounds for i in CartesianIndices(dofs)
-    output += lagrange(x, nodes, Tuple(i), dofs[i])
+function lagrange(x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
+  T1 = promote_type(eltype(x), eltype(first(dofsargs)))
+  output = MVector{M,T1}(undef)
+  lagrange!(output, x, nodes, dofsargs...)
+  return output
+end
+function lagrange!(output, x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
+  work = workarray(nodes, threadid())
+  @inbounds for i in CartesianIndices(work)
+    work[i] = lagrange(x, nodes, Tuple(i))
+  end
+  @inbounds for (j, dofs) in enumerate(dofsargs)
+    output[j] = dot(work, dofs)
   end
   return output
 end
+
 
 maybesolvedofs!(dofs, nodes, _::DelayDofsSolve) = nothing
 function maybesolvedofs!(dofs, nodes, _::SolveDofsNow)
@@ -116,22 +135,23 @@ function solvedofsifnecessary!(dofs, nodes, d::DelayDofsSolve)
 end
 
 function lagrangeinner!(dofs, x::AbstractVector, nodes, value)
-  for i in CartesianIndices(dofs)
-    dofs[i] += lagrange(x, nodes, Tuple(i), value)
+  @inbounds for i in CartesianIndices(dofs)
+    dofs[i] += lagrange(x, nodes, Tuple(i)) * value
   end
 end
-function lagrange!(dofs, x::AbstractVector, nodes::NDimNodes, value,
-    solvedofsornot::MaybeSolveDofs=SolveDofsNow())
-  @assert size(dofs) == Tuple(length(n) for n in nodes)
+function lagrange!(dofs, x::AbstractVector, nodes::NDimNodes{N}, value,
+    solvedofsornot::MaybeSolveDofs) where N
+  @assert all(i->size(dofs, i) == length(nodes[i]), 1:N)
   lagrangeinner!(dofs, x, nodes, value)
   maybesolvedofs!(dofs, nodes, solvedofsornot)
 end
-function lagrange!(dofs, xs::AbstractArray{<:Real, 2}, nodes::NDimNodes, value::T,
-    solvedofsornot::MaybeSolveDofs=SolveDofsNow()) where {T}
-  @assert size(dofs) == Tuple(length(n) for n in nodes)
-  for i in 1:size(xs, 2)
-    val = (T <: Number) ? value : value[i] # this isn't good but hopefully the compiler is cleverer than me
-    lagrangeinner!(dofs, (@view xs[:, i]), nodes, val)
+
+function lagrange!(dofs, xs::AbstractArray{<:Real, 2}, nodes::NDimNodes{N}, value::T,
+    solvedofsornot::MaybeSolveDofs) where {N,T}
+  @assert all(i->size(dofs, i) == length(nodes[i]), 1:N)
+  @inbounds @views for i in axes(xs, 2)
+    val = (T <: Number) ? value : value[i] # this isn't good but the compiler can figure it out
+    lagrangeinner!(dofs, xs[:, i], nodes, val)
   end
   maybesolvedofs!(dofs, nodes, solvedofsornot)
 end
@@ -140,8 +160,8 @@ function lagrange!(dofs, nodes::NDimNodes, f::F,
     solvedofsornot::MaybeSolveDofs=SolveDofsNow()) where {F<:Function}
   a, b = _a(nodes), _b(nodes)
   @assert size(dofs) == Tuple(length(n) for n in nodes)
-  for i in CartesianIndices(dofs)
-    dofs[i] = HCubature.hcubature(x->f(x) * lagrange(x, nodes, Tuple(i), 1), a, b,
+  @inbounds for i in CartesianIndices(dofs)
+    dofs[i] = HCubature.hcubature(x->f(x) * lagrange(x, nodes, Tuple(i)), a, b,
                                   atol=ATOL, rtol=sqrt(eps()))[1]
     #dofs[i] *= abs(dofs[i] > 100ATOL)
   end
@@ -150,8 +170,8 @@ end
 function massmatrix(nodesi::T, nodesj::U,
     ) where {T<:AbstractLagrangeNodes,U<:AbstractLagrangeNodes}
   output = zeros(length(nodesi), length(nodesj))
-  for j in eachindex(nodesj), i in eachindex(nodesi)
-    output[i, j] = QuadGK.quadgk(x->lagrange(x, nodesi, i, 1) * lagrange(x, nodesj, j, 1),
+  @inbounds for j in eachindex(nodesj), i in eachindex(nodesi)
+    output[i, j] = QuadGK.quadgk(x->lagrange(x, nodesi, i) * lagrange(x, nodesj, j),
                                  -1, 1, atol=ATOL, rtol=RTOL)[1]
     #output[i, j] *= abs(output[i, j] > 100ATOL)
   end
@@ -177,7 +197,7 @@ function massmatrixdictionary(nodesi::NDimNodes, nodesj::NDimNodes)
   Ms = [massmatrix(nodesi[i], nodesj[i]) for i in eachindex(nodesi)]
   @assert length(Ms) == length(nodesi)
   d = Dict()
-  for i in CartesianIndices(szi), j in CartesianIndices(szj)
+  @inbounds for i in CartesianIndices(szi), j in CartesianIndices(szj)
     indsi = Tuple(i)
     indsj = Tuple(j)
     d[(indsi, indsj)] = prod(Ms[k][indsi[k], indsj[k]] for k in 1:length(nodesi))
@@ -207,6 +227,8 @@ function massmatrix(nodesi::NDimNodes, nodesj::NDimNodes)
 end
 
 massmatrix(nodes::NDimNodes) = massmatrix(nodes, nodes)
+
+lumassmatrix(n::NDimNodes) = n.lumm
 
 const _lumassmatrixdict = Dict{UInt64, Any}()
 function lumassmatrix(args...)

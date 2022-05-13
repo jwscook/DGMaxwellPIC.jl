@@ -6,8 +6,11 @@ struct ParticleData{N, T<:AbstractArray}
   cellids::Vector{Int64}
   perm::Vector{Int64}
   id::Vector{Int64}
-  work1::Matrix{Float64}
-  work2::Matrix{Float64}
+  work3::Matrix{Float64}
+  work6::Matrix{Float64}
+  workN31::Matrix{Float64}
+  workint1::Vector{Int64}
+  workint2::Vector{Int64}
   function ParticleData(data::Array{T,2}) where {T}
     npart = size(data, 2)
     @assert npart > 0
@@ -16,7 +19,10 @@ struct ParticleData{N, T<:AbstractArray}
       zeros(Int64, npart),
       collect(1:npart),
       zeros(Float64, 3, npart),
-      zeros(Float64, 3, npart))
+      zeros(Float64, 6, npart),
+      zeros(Float64, size(data)...),
+      zeros(Int64, npart),
+      zeros(Int64, npart))
   end
 end
 
@@ -27,28 +33,37 @@ end
 
 Base.length(p::ParticleData) = size(p.data, 2)
 
-function Base.sort!(p::ParticleData, g::Grid)
+function Base.sort!(p::ParticleData{N}, g::Grid) where N
   x = position(p)
   lb = lower(g)
   ub = upper(g)
   sg = size(g)
   linear = LinearIndices(sg)
   @threads for i in 1:size(p.data, 2)
+  #for i in 1:size(p.data, 2)
     index = cellid(g, (@view x[:, i]))
     @assert !isnothing(index) "$lb, $(x[:, i]), $ub"
     p.cellids[i] = linear[index...]
     @assert 0 < p.cellids[i] <= length(g)
   end
   sortperm!(p.perm, p.cellids)
-  #@views p.data .= p.data[:, p.perm]
-  #p.cellids .= p.cellids[p.perm]
-  #p.id .= p.id[p.perm]
-  t1 = @spawn (@views p.data .= p.data[:, p.perm])
-  t2 = @spawn (p.cellids .= p.cellids[p.perm])
-  t3 = @spawn (p.id .= p.id[p.perm])
-  wait(t1)
-  wait(t2)
-  wait(t3)
+  @threads for j in 1:size(p.data, 2)
+  #for j in 1:size(p.data, 2)
+    permj = p.perm[j]
+    for i in 1:N
+      p.workN31[i, j] = p.data[i, permj]
+    end
+    p.workint1[j] = p.cellids[permj]
+    p.workint2[j] = p.id[permj]
+  end
+  @threads for j in 1:size(p.data, 2)
+  #for j in 1:size(p.data, 2)
+    for i in 1:N
+      p.data[i, j] = p.workN31[i, j]
+    end
+    p.cellids[j] = p.workint1[j]
+    p.id[j] = p.workint2[j]
+  end
   return p
 end
 
@@ -60,7 +75,7 @@ ids(p::ParticleData) = p.id
 
 position!(p::ParticleData{N}, x, i::Integer) where {N} = (p.data[1:N, i] .= x; p)
 velocity!(p::ParticleData{N}, v, i::Integer) where {N} = (p.data[N+1:N+3, i] .= v; p)
-weight!(p::ParticleData{N}, w, i::Integer) where {N} = (p.data[N+4, ] .= w; p)
+weight!(p::ParticleData{N}, w, i::Integer) where {N} = (p.data[N+4, i] .= w; p)
 
 position(p::ParticleData{N}) where {N} = @view p.data[1:N, :]
 velocity(p::ParticleData{N}) where {N} = @view p.data[N+1:N+3, :]
@@ -86,8 +101,27 @@ zvelocity!(p::ParticleData{N}, v) where {N} = (@views p.data[N+3, :] .= v; p)
 weight!(p::ParticleData{N}, w) where {N} = (@views p.data[N+4, :] .= w; p)
 
 
+function vanderCorput(n, base)
+  @assert base > 1
+  vdc, denom = 0, 1
+  while !iszero(n)
+    denom *= base
+    n, remainder = divrem(n, base)
+    vdc += remainder / denom 
+  end
+  return vdc
+end
+
+#function halton(n, dim)
+#  output = zeros((n, dim))
+#  for j in 1:dim, i in 1:n
+#    output[i, j] = vanderCorput(i, prime(j)) 
+#  end
+#  return output
+#end
+
 struct HaltonSampler <: AbstractParticleSampler end
-(h::HaltonSampler)(i, p) = haltonvalue(i, p)
+(h::HaltonSampler)(i, p) = vanderCorput(i, p)
 
 struct RandomSampler <: AbstractParticleSampler end
 (r::RandomSampler)(i, p) = rand()

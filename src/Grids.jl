@@ -15,6 +15,9 @@ struct Grid{N,T<:BasisFunctionType,U}
   end
 end
 Base.getindex(g::Grid, i...) = g.data[i...]
+Base.getindex(g::Grid{1}, i::NTuple{1,Integer}) = g.data[i[1]]
+Base.getindex(g::Grid{2}, i::NTuple{2,Integer}) = g.data[i[1], i[2]]
+Base.getindex(g::Grid{3}, i::NTuple{3,Integer}) = g.data[i[1], i[2], i[3]]
 Base.size(g::Grid) = size(g.data)
 Base.size(g::Grid, i) = size(g.data, i)
 Base.length(g::Grid) = length(g.data)
@@ -79,7 +82,8 @@ end
 for (fname, offset, len) ∈ ((:electricfield, 0, 3),
                             (:magneticfield, 3, 3),
                             (:currentfield, 6, 3),
-                            (:chargefield, 9, 1))
+                            (:chargefield, 9, 1),
+                            (:electromagneticfield, 0, 6))
   fname! = Symbol(fname, :!)
   privatefname! = Symbol(:_, fname, :!)
   fnamedofs = Symbol(fname, :dofs)
@@ -105,64 +109,79 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     return s.q[component + $offset]
   end
 
+  @eval function $(privatefname!)(dofs, x, component::Integer, value,
+      solvedofsornot::MaybeSolveDofs, nodes)
+    @assert 1 <= component <= $len
+    @assert !any(isnan, x)
+    N = length(size(dofs))
+    all(-1 <= x[i] <= 1 for i in 1:N) || @warn "x outside [-1, 1]^n"
+    fill!(dofs, 0)
+    lagrange!(dofs, x, nodes, value, solvedofsornot)
+    @assert !any(isnan, dofs)
+  end
+
   @eval function $(fname)(s::State{N, NodeType}, nodes, x, component) where {N, NodeType}
     @assert 1 <= component <= $len
     all(-1 <= x[i] <= 1 for i in 1:N) || @warn "x, $x, outside [-1, 1]^n"
     dofs = $(fnamedofs)(s, component)
-    sizetuple = size(dofs)
-    return lagrange(x, nodes, dofs)
+    return lagrange(x, nodes, dofs)[1]
   end
 
+  # this function deserves more work to get rid of if-else statement
   @eval function $(fname!)(output::AbstractVector, s::State{N, NodeType}, nodes, x) where {N, NodeType}
     all(-1 <= x[i] <= 1 for i in 1:N) || @warn "x, $x, outside [-1, 1]^n"
-    dofs = ndofs(s)
-    sizetuple = size(dofs)
-    for component in 1:$(len)
-      output[component] = $(fname)(s, nodes, x, component)
+    @assert length(output) == $len
+    if $len == 6
+      lagrange!(output, x, nodes, $(fnamedofs)(s, 1), $(fnamedofs)(s, 2), $(fnamedofs)(s, 3),
+                                  $(fnamedofs)(s, 4), $(fnamedofs)(s, 5), $(fnamedofs)(s, 6))
+    elseif $len == 3
+      lagrange!(output, x, nodes, $(fnamedofs)(s, 1), $(fnamedofs)(s, 2), $(fnamedofs)(s, 3))
+    elseif $len == 1
+      lagrange!(output, x, nodes, $(fnamedofs)(s, 1))
+    else
+      @warn "This shouldn't happen"
+      args = Tuple($(fnamedofs)(s, i) for i in 1:$len)
+      lagrange!(output, x, nodes, args...)
     end
-    @assert !any(isnan, output) "output = $output"
+    @assert !any(isnan, output)
     return output
   end
 
   @eval function $(fname)(s::State{N, NodeType}, nodes, x) where {N, NodeType}
     output = @MArray zeros(eltype(x), $(len))
     fname!(output, s, nodes, x)
-    output
+    return output
   end
 
   @eval function $(fname!)(output::AbstractMatrix, s::State{N, NodeType}, nodes, x) where {N, NodeType}
-    @assert size(output, 2) == size(x, 2) "$(size(output, 2)), $(size(x, 2))"
+    @assert size(output, 2) == size(x, 2)
     @views for i in axes(output, 2)
       $(fname!)(output[:, i], s, nodes, x[:, i])
     end
     return output
   end
 
-  @eval function $(privatefname!)(dofs, x, component::Integer, value,
-      solvedofsornot::MaybeSolveDofs, nodes)
-    @assert 1 <= component <= $len
-    @assert !any(isnan, x) "x=$x"
-    N = length(size(dofs))
-    all(-1 <= x[i] <= 1 for i in 1:N) || @warn "x, $x, outside [-1, 1]^n in $(privatefname!)"
-    fill!(dofs, 0)
-    lagrange!(dofs, x, nodes, value, solvedofsornot)
-    @assert !any(isnan, dofs) "dofs = $dofs, x = $x, value = $value"
+  @eval function $(fname!)(cell::Cell, n, x)
+    referencex!(x, cell)
+    $(fname!)(state(cell), n, x)
+    originalx!(x, cell)
+    return nothing
   end
-
-#  @eval function $(fname!)(c::Cell{N, NodeType}, nodes, x::T, values::U
-#      ) where {N, NodeType, T<:AbstractArray{<:Number, 1}, U<:AbstractArray{<:Number, 1}}
-#    @assert length(values) == $(len)
-#    @warn "This is the slow version"
-#    s = state(c)
-#    dofs = workdofs(s)
-#    z = referencex(x, c)
-#    for i in 1:$(len)
-#      $(privatefname!)(dofs, z, i, values[i], SolveDofsNow(), nodes)
-#      # below is a is a no-op
-#      maybesolvedofs!(dofs, nodes, DelayDofsSolve())
-#      $(incrementfnamedofs!)(s, dofs, i)
-#    end
-#  end
+  @eval function $(fname!)(output, cell::Cell, n, x)
+    referencex!(x, cell)
+    $(fname!)(output, state(cell), n, x)
+    originalx!(x, cell)
+    return nothing
+  end
+  @eval function $(fname)(cell::Cell, n, x, component)
+    referencex!(x, cell)
+    $(fname)(state(cell), n, x, component)
+    originalx!(x, cell)
+    return nothing
+  end
+  @eval $(fname)(cell::Cell, n, x::SVector, component) = $(fname)(state(cell), n, referencex(x, cell), component)
+  @eval $(fname!)(cell::Cell, n, x::SVector) = $(fname)(state(cell), n, referencex(x, cell))
+  @eval $(fname!)(output, cell::Cell, n, x::SVector) = $(fname)(output, state(cell), n, referencex(x, cell))
 
   @eval function $(fname!)(c::Cell{N, NodeType}, nodes, x::T, values::U,
       ) where {N, NodeType, T<:AbstractArray{<:Number, 2}, U<:AbstractArray{<:Number, 2}}
@@ -174,7 +193,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     for i in 1:$(len)
       fill!(dofs, 0)
       #$(privatefname!)(dofs, z, i, (@view values[i, :]), DelayDofsSolve(), nodes)
-      $(privatefname!)(dofs, x, i, (@view values[i, :]), DelayDofsSolve(), nodes)
+      $(privatefname!)(dofs, x, i, (@view values[i, :]), DelayDofsSolve(), nodes) # this is allocating
       maybesolvedofs!(dofs, nodes, SolveDofsNow())
       dofs .*= jacobian(c)
       $(incrementfnamedofs!)(s, dofs, i)
@@ -197,31 +216,28 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     end
   end
 
-  @eval $(fname)(cell::Cell{N,T}, n, x, args...) where {N,T} = $(fname)(state(cell), n, referencex(x, cell), args...)
-  @eval $(fname!)(cell::Cell{N,T}, n, x, args...) where {N,T} = $(fname!)(state(cell), n, referencex(x, cell), args...)
-  @eval $(fname!)(output, cell::Cell{N,T}, n, x, args...) where {N,T} = $(fname!)(output, state(cell), n, referencex(x, cell), args...)
-
-  @eval function $(fname)(g::Grid{N}, args...) where {N}
-    x = args[1]
+#  @eval function $(fname)(g::Grid{N}, args::Vararg) where {N}
+ @eval function $(fname)(g::Grid{N}, x, component) where {N}
+#    x = args[1]
     c = cell(g, x)
     nodes = ndimnodes(g, c)
     isnothing(c) && return zeros(eltype(x), $(len))
-    return $(fname)(state(c), nodes, referencex(x, c), args[2:end]...)
+    return $(fname)(state(c), nodes, referencex(x, c), component)#args[2:end]...)
+    #return $(fname)(state(c), nodes, referencex(x, c), args[2:end]...)
   end
 
   @eval function $(fname)(g::Grid, component::Integer)
     output = zeros(size(g))
     for i in CartesianIndices(size(g))
       nodes = ndimnodes(g, i)
-      output[i] = $(fname)(g[i], nodes, centre(g[i]), component)
+      output[i] = $(fname)(g[i], nodes, centre(g[i]), component)[1]
     end
     return output
   end
   @eval $(fname)(g::Grid) = ($(fname)(g, i) for i in 1:$len)
 
-  @eval function $(fname!)(g::Grid{N}, args...) where {N}
+  @eval function $(fname!)(g::Grid{N}, x, args::Vararg) where {N}
     # this is the slow version that processes each particle at a time and finds its cell
-    x = args[1]
     c = cell(g, x)
     isnothing(c) || $(fname!)(state(c), ndimnodes(g, c), referencex(x, c), args[2:end]...)
   end
@@ -233,31 +249,30 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     foreach(i->foreach(component->$(fnamedofs!)(state(g[i]), data, component), 1:$len), eachindex(g))
   end
 
-  @eval function $(fname!)(g::Grid{N}, cellids::Vector{<:Integer}, x::AbstractArray{<:Number, 2},
-       args...) where {N}
+  @eval function $(fname!)(g::Grid{N}, cellids::Vector{<:Integer}, x::AbstractArray{<:Number, 2}, arg) where {N}
     # this is the fast version that processes batches of particle that are sorted into cells
-    @assert issorted(cellids) "$cellids"
+    @assert issorted(cellids)
     isempty(cellids) && return nothing
-    @views @threads for i in eachindex(g)
+    @inbounds @threads for i in eachindex(g)
       i1 = findfirst(==(i), cellids)
       i1 == nothing && continue
       i2 = findlast(==(i), cellids)
       cell = g[i]
-      $(fname!)(cell, ndimnodes(g, cell), x[:, i1:i2], args...) # bugfest args!?!
+      $(fname!)(cell, ndimnodes(g, cell), (@view x[:, i1:i2]), arg)
     end
   end
 
   @eval function $(fname!)(output::AbstractArray, g::Grid{N}, cellids::Vector{<:Integer},
-      x::AbstractArray{<:Number, 2}, args...) where {N}
+      x::AbstractArray{<:Number, 2}) where {N}
     # this is the fast version that processes batches of particle that are sorted into cells
-    @assert issorted(cellids) "$cellids"
+    @assert issorted(cellids)
     isempty(cellids) && return nothing
-    @views @threads for i in eachindex(g)
+    @inbounds @threads for i in eachindex(g)
       i1 = findfirst(==(i), cellids)
       i1 == nothing && continue
       i2 = findlast(==(i), cellids)
       cell = g[i]
-      $(fname!)(output[:, i1:i2], cell, ndimnodes(g, cell), x[:, i1:i2], args...) # bugfest args!?!
+      $(fname!)((@view output[:, i1:i2]), cell, ndimnodes(g, cell), (@view x[:, i1:i2]))
     end
   end
 
@@ -290,11 +305,9 @@ function cellid(g::Grid{N}, x) where {N}
   sg = size(g)
   index = NTuple{N, Int}(Int(ceil(sg[i] * (x[i] - lb[i])/(ub[i] - lb[i]))) for i in eachindex(x))
   in(x, g[index...]) && return index
-  if ! # floating point inaccuracy has happened so work out cell by brute force
-    for i in CartesianIndices(g.data)
-      if in(x, g[i])
-        return Tuple{N, Int}(i)
-      end
+  for i in CartesianIndices(g.data)
+    if in(x, g[i])
+      return Tuple{N, Int}(i)
     end
   end
   throw(ErrorException("Shouldnt be able to get here: $lb, $x, $ub"))
@@ -303,7 +316,7 @@ end
 function cell(g::Grid, x)
   index = cellid(g, x)
   c = g[index...]
-  @assert in(x, c) "$(lower(c)), $x, $(upper(c))"
+  @assert in(x, c)
   return c
 end
 
@@ -326,6 +339,6 @@ end
 divB(g::Grid, x) = divergence(g, x, magneticfield)
 divE(g::Grid, x) = divergence(g, x, electricfield)
 
-sources(g::Grid) = -speedoflight^2 * mu0 * currentsource(g)
+sources!(output, g::Grid) = -speedoflight^2 * mu0 * currentsource!(output, g)
 
 

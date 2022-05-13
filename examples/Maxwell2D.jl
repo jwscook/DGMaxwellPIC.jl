@@ -39,8 +39,6 @@ const upwind = 1
 const M = assemble(grid2D, upwind=upwind);
 #@show "Building Crank-Nicolson"
 #const A = (I - M * dt / 2) \ Matrix(I + M * dt / 2);
-#@show "Calcuating sources"
-#const S = sources(grid2D);
 @show "Fetching dofs vector"
 const u = deepcopy(dofs(grid2D));
 const k1 = deepcopy(u);

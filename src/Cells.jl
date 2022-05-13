@@ -21,10 +21,10 @@ dofs(c::Cell) = vcat(((@view c.state.q[i][:]) for i in 1:6)...) # TODO think abo
 currentdofs(c::Cell) = vcat(((@view c.state.q[i][:]) for i in 7:9)...) # TODO think about shape
 chargedofs(c::Cell) = @view c.state.q[10]
 workdofs(c::Cell) = @view c.state.q[11]
-referencex(x, c::Cell{N}) where {N} = ((x .- c.lower) ./ (c.upper .- c.lower) .* 2 .- 1)
-originalx(x, c::Cell{N}) where {N} = ((x .+ 1) ./2 .* (c.upper .- c.lower) .+ c.lower)
-referencex!(x, c::Cell{N}) where {N} = (x .= (x .- c.lower) ./ (c.upper .- c.lower) .* 2 .- 1)
-originalx!(x, c::Cell{N}) where {N} = (x .= (x .+ 1) ./2 .* (c.upper .- c.lower) .+ c.lower)
+referencex(x, c::Cell{N}) where {N} = @. ((x - c.lower) / (c.upper - c.lower) * 2 - 1)
+originalx(x, c::Cell{N}) where {N} = @. ((x + 1) /2 * (c.upper - c.lower) + c.lower)
+referencex!(x, c::Cell{N}) where {N} = (@. x = (x - c.lower) / (c.upper - c.lower) * 2 - 1)
+originalx!(x, c::Cell{N}) where {N} = (@. x = (x + 1) /2 * (c.upper - c.lower) + c.lower)
 boundingbox(c::Cell) = (c.lower, c.upper)
 lower(c::Cell) = c.lower
 upper(c::Cell) = c.upper

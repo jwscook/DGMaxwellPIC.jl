@@ -5,7 +5,6 @@ using ConcreteStructs
 using FastGaussQuadrature
 using FLoops
 using ForwardDiff
-using HaltonSequences
 using HCubature
 using LazyArrays
 using LinearAlgebra

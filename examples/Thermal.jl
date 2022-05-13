@@ -41,9 +41,9 @@ const plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)]);
 sort!(plasma, grid2D) # sort particles by cellid
 
 const A = assemble(grid2D);
-const S = sources(grid2D);
 
 const u = dofs(grid2D);
+const S = deepcopy(u);
 
 Bz = magneticfield(grid2D, 3);
 
@@ -65,7 +65,7 @@ dofs!(grid2D, 0.0)
 const to = TimerOutput()
 @gif for i in 1:100
   @timeit to "deposit" depositcurrent!(grid2D, plasma)
-  @timeit to "source" S .= sources(grid2D)
+  @timeit to "sources!" sources!(S, grid2D)
   @timeit to "u .+=" u .+= (A * u .+ S) .* dt
   @timeit to "dofs!" dofs!(grid2D, u)
   advance!(plasma, grid2D, dt)
