@@ -35,8 +35,8 @@ sort!(plasma, grid2D) # sort particles by cellid
 const u = dofs(grid2D);
 const S = deepcopy(u);
 sort!(plasma, grid2D)
-#const to = TimerOutput()
-#  const dt = 1.0
+const to = TimerOutput()
+const dt = 1.0
 #  const cellids = DGMaxwellPIC.cellids(littleplasma.species[1])
 #  const pos = DGMaxwellPIC.position(littleplasma.species[1])
 #  const output = DGMaxwellPIC.workarrays(littleplasma.species[1])[2]

@@ -1,23 +1,34 @@
 
 struct Grid{N,T<:BasisFunctionType,U}
   data::Array{Cell{N, T,U}, N}
-  lower::Vector{Float64}
-  upper::Vector{Float64}
+  lower::SVector{N,Float64}
+  upper::SVector{N,Float64}
+  inverselengths::SVector{N,Float64}
   dofoffsetdict::Dict{NTuple{N,Int}, Int}
   dofrangedict::Dict{NTuple{N,Int}, UnitRange{Int}}
   ndimnodesdict::Dict{NTuple{N,Int}, NDimNodes{N,T}}
   lummdict::Dict{UInt64, LU{Float64, Matrix{Float64}}} # lu of mass matrices
   function Grid(data::Array{Cell{N, T, U},N}) where {N,T,U}
-    return new{N,T,U}(data,
-    collect(minimum(x->x.lower, data)),
-    collect(maximum(x->x.upper, data)),
-    lookupdicts(data, T)...)
+    lower = SVector{N,Float64}(minimum(x->x.lower, data))
+    upper = SVector{N,Float64}(maximum(x->x.upper, data))
+    invlengths = SVector{N,Float64}(1 ./ (upper .- lower))
+    return new{N,T,U}(data, lower, upper, invlengths, lookupdicts(data, T)...)
   end
 end
-Base.getindex(g::Grid, i...) = g.data[i...]
-Base.getindex(g::Grid{1}, i::NTuple{1,Integer}) = g.data[i[1]]
-Base.getindex(g::Grid{2}, i::NTuple{2,Integer}) = g.data[i[1], i[2]]
-Base.getindex(g::Grid{3}, i::NTuple{3,Integer}) = g.data[i[1], i[2], i[3]]
+#Base.getindex(g::Grid, i...) = g.data[i...]
+
+const IndexUnion{N} = Union{NTuple{N,<:Integer},SVector{N,<:Integer},CartesianIndex{N}}
+Base.getindex(g::Grid, i::Integer) = g.data[i]
+Base.getindex(g::Grid{1}, i::IndexUnion{1}) = @inbounds g.data[i[1]]
+Base.getindex(g::Grid{2}, i::IndexUnion{2}) = @inbounds g.data[i[1], i[2]]
+Base.getindex(g::Grid{3}, i::IndexUnion{3}) = @inbounds g.data[i[1], i[2], i[3]]
+
+function likelycellindex(g::Grid{N}, x) where N
+  lb = lower(g)
+  il = inverselengths(g)
+  ind = SVector{N,Int}(Int.(ceil.(size(g) .* (x .- lb) .* il)))
+  return ind
+end
 Base.size(g::Grid) = size(g.data)
 Base.size(g::Grid, i) = size(g.data, i)
 Base.length(g::Grid) = length(g.data)
@@ -27,6 +38,7 @@ Base.iterate(g::Grid) = iterate(g.data)
 Base.iterate(g::Grid, state) = iterate(g.data, state)
 lower(g::Grid) = g.lower
 upper(g::Grid) = g.upper
+inverselengths(g::Grid) = g.inverselengths
 boundingbox(g::Grid) = (lower(g), upper(g))
 volume(g::Grid) = prod(upper(g) .- lower(g))
 zero!(g::Grid) = zero!.(g.data)
@@ -254,11 +266,10 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     @assert issorted(cellids)
     isempty(cellids) && return nothing
     @inbounds @threads for i in eachindex(g)
-      i1 = findfirst(==(i), cellids)
-      i1 == nothing && continue
-      i2 = findlast(==(i), cellids)
+      i12 = searchsorted(cellids, i)
+      isempty(i12) && continue
       cell = g[i]
-      $(fname!)(cell, ndimnodes(g, cell), (@view x[:, i1:i2]), arg)
+      $(fname!)(cell, ndimnodes(g, cell), (@view x[:, i12]), arg)
     end
   end
 
@@ -268,11 +279,10 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     @assert issorted(cellids)
     isempty(cellids) && return nothing
     @inbounds @threads for i in eachindex(g)
-      i1 = findfirst(==(i), cellids)
-      i1 == nothing && continue
-      i2 = findlast(==(i), cellids)
+      i12 = searchsorted(cellids, i)
+      isempty(i12) && continue
       cell = g[i]
-      $(fname!)((@view output[:, i1:i2]), cell, ndimnodes(g, cell), (@view x[:, i1:i2]))
+      $(fname!)((@view output[:, i12]), cell, ndimnodes(g, cell), (@view x[:, i12]))
     end
   end
 
@@ -299,15 +309,12 @@ function cellcentres(g::Grid{N}) where {N}
   return output
 end
 
-function cellid(g::Grid{N}, x)::NTuple{N, Int64} where {N}
-  lb = lower(g)
-  ub = upper(g)
-  sg = size(g)
-  index = Tuple(Int(ceil(sg[i] * (x[i] - lb[i])/(ub[i] - lb[i]))) for i in eachindex(x))
-  in(x, g[index...]) && return index
+function cellid(g::Grid{N}, x)::SVector{N, Int64} where {N}
+  @inbounds index = likelycellindex(g, x)
+  @inbounds inxg = in(x, g[index]) && return index
   for i in CartesianIndices(g.data)
     if in(x, g[i])
-      return Tuple(i)
+      return SVector{N,Int}(Tuple(i))
     end
   end
   throw(ErrorException("Shouldnt be able to get here: $lb, $x, $ub"))
@@ -315,7 +322,7 @@ end
 
 function cell(g::Grid, x)
   index = cellid(g, x)
-  c = g[index...]
+  c = g[index]
   @assert in(x, c)
   return c
 end

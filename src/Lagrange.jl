@@ -99,8 +99,8 @@ lagrange(x::Number, n::AbstractLagrangeNodes, ind::Integer, coeff::Number) = n(x
 
 function lagrange(x, nodes::NDimNodes, inds::NTuple{N,Integer}) where {N}
   @assert length(x) == ndims(nodes) == N
-  output = nodes[1](x[1], inds[1])
-  for i in 2:ndims(nodes)
+  @inbounds output = nodes[1](x[1], inds[1])
+  @inbounds for i in 2:ndims(nodes)
     output *= nodes[i](x[i], inds[i])
   end
   return output

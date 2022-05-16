@@ -32,21 +32,19 @@ function ParticleData(f::F, npart_upperbound, lowerxv, upperxv,
 end
 
 Base.length(p::ParticleData) = size(p.data, 2)
+Base.eltype(p::ParticleData) = eltype(p.data)
 
 function Base.sort!(p::ParticleData{N}, g::Grid) where N
   x = position(p)
-  lb = lower(g)
-  ub = upper(g)
-  sg = size(g)
-  linear = LinearIndices(sg)
-  @threads for i in 1:size(p.data, 2)
-    index = cellid(g, (@view x[:, i]))
+  linear = LinearIndices(size(g))
+  @inbounds for i in 1:size(p.data, 2)
+    index = cellid(g, SVector{N,eltype(p)}(@view x[:, i]))
     @assert !isnothing(index)
-    p.cellids[i] = linear[index...]
+    p.cellids[i] = linear[CartesianIndex(Tuple(index))]
     @assert 0 < p.cellids[i] <= length(g)
   end
   sortperm!(p.perm, p.cellids)
-  @threads for j in 1:size(p.data, 2)
+  @inbounds for j in 1:size(p.data, 2)
     permj = p.perm[j]
     for i in axes(p.data, 1)
       p.workN31[i, j] = p.data[i, permj]
@@ -54,7 +52,7 @@ function Base.sort!(p::ParticleData{N}, g::Grid) where N
     p.workint1[j] = p.cellids[permj]
     p.workint2[j] = p.id[permj]
   end
-  @threads for j in 1:size(p.data, 2)
+  @inbounds for j in 1:size(p.data, 2)
     for i in axes(p.data, 1)
       p.data[i, j] = p.workN31[i, j]
     end
@@ -104,7 +102,7 @@ function vanderCorput(n, base)
   while !iszero(n)
     denom *= base
     n, remainder = divrem(n, base)
-    vdc += remainder / denom 
+    vdc += remainder / denom
   end
   return vdc
 end
@@ -112,7 +110,7 @@ end
 #function halton(n, dim)
 #  output = zeros((n, dim))
 #  for j in 1:dim, i in 1:n
-#    output[i, j] = vanderCorput(i, prime(j)) 
+#    output[i, j] = vanderCorput(i, prime(j))
 #  end
 #  return output
 #end

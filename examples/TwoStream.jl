@@ -30,7 +30,7 @@ function foo()
   dataxvw[1:DIMS, :] .= rand(DIMS, NP) .* (b .- a) .+ a
   dataxvw[DIMS+1, :] .= rand((-1, 1), NP)
   particledata = DGMaxwellPIC.ParticleData(dataxvw);
-  weight!(particledata, 32 * pi^2 / 2 * area / length(particledata));
+  weight!(particledata, 32 * pi^2 / 2 * area / length(particledata) / 10);
   
   plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)]);
   sort!(plasma, grid2D) # sort particles by cellid
@@ -45,7 +45,7 @@ function foo()
   S = deepcopy(u);
   
   dtc = norm((b .- a)./sqrt((NX * OX)^2 + (NY * OY)^2)) / DGMaxwellPIC.speedoflight
-  dt = dtc *0.1
+  dt = dtc * 0.1
   
   grid2Dcopy = deepcopy(grid2D)
   sort!(plasma, grid2Dcopy)
@@ -79,7 +79,8 @@ function foo()
 
   to = TimerOutput()
   ngifevery = 8
-  @gif for i in 1:1024
+  NI = 128#4196
+  @gif for i in 1:NI
     @timeit to "advance!" advance!(plasma, grid2D, dt/2)
     @timeit to "deposit" depositcurrent!(grid2D, plasma)
     @timeit to "source" sources!(S, grid2D)
@@ -101,7 +102,7 @@ function foo()
      if i % ngifevery == 1 # only do this if we need to make plots
        x = DGMaxwellPIC.position(plasma.species[1])
        v = DGMaxwellPIC.velocity(plasma.species[1])
-       p1 = scatter(x[1, :], v[1, :])
+       p1 = scatter(x[1, :], v[1, :]); title!("$i of $NI")
        plot(p1)
       #p1 = heatmap(electricfield(grid2D, 1))
       #p2 = heatmap(electricfield(grid2D, 2))

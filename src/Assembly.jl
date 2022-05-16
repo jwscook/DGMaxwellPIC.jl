@@ -34,10 +34,10 @@ end
 
 function findneighbourgridindex(g::Grid{N}, homeindex, searchdir, side) where N
   gridsize = size(g)
-  return [mod1(homeindex[j] + (searchdir == j) * ((side == Low) ? -1 : 1), gridsize[j]) for j in 1:N]
+  return SVector{N,Int}(mod1(homeindex[j] + (searchdir == j) * ((side == Low) ? -1 : 1), gridsize[j]) for j in 1:N)
 end
 function findneighbourcell(g::Grid{N}, homeindex, searchdir, side) where N
-  return g[findneighbourgridindex(g, homeindex, searchdir, side)...]
+  return g[findneighbourgridindex(g, homeindex, searchdir, side)]
 end
 
 _fluxmatrix(stencil, x::AbstractArray) = sparse(kron(stencil, x))
@@ -72,7 +72,7 @@ end
 function surfacefluxstiffnessmatrix!(ijv::SparseIJV, g::Grid{N,T}, cellindex::Tuple,
     upwind=0.0) where {N,T}
   zero!(ijv)
-  cell = g[cellindex...]
+  cell = g[cellindex]
   nodesi = NDimNodes(dofshape(cell), T)
   celldofindices = indices(g, cellindex)
   lumm = lumassmatrix!(g, cell)
@@ -86,7 +86,7 @@ function surfacefluxstiffnessmatrix!(ijv::SparseIJV, g::Grid{N,T}, cellindex::Tu
     setindex!(ijv, celldofindices, celldofindices, fluxii)
 
     neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
-    neighbourcell = g[neighbourcellgridindex...]
+    neighbourcell = g[neighbourcellgridindex]
     nodesj = NDimNodes(dofshape(neighbourcell), T)
     fluxij = ndofs(nodesi) == ndofs(nodesj) ? fluxii : zeros(6ndofs(nodesi), 6ndofs(nodesj))
     surfacefluxstiffnessmatrix!(fluxij, nodesi, nodesj, side, opposite(side), dim, upwind)
@@ -127,7 +127,7 @@ function _surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N
       @views output[celldofindices, celldofindices] .-= flux .* factor
 
       neighbourcellgridindex = findneighbourgridindex(g, cellindex, dim, side)
-      neighbourcell = g[neighbourcellgridindex...]
+      neighbourcell = g[neighbourcellgridindex]
       nodesj = NDimNodes(dofshape(neighbourcell), T)
       surfacefluxstiffnessmatrix!(flux, nodesi, nodesj, side, opposite(side), dim, upwind)
       flux .*= jacobian(cell; ignore=dim)

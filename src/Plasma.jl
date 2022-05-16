@@ -13,13 +13,13 @@ end
 
 function depositcurrent!(g::Grid{N}, plasma::Plasma) where N
   currentfielddofs!(g, 0) # zero current
-  sort!(plasma, g)
+  #@assert issorted(plasma)
   for species in plasma
     v = velocity(species)
     w = weight(species)
     q = charge(species)
     j, _ = workarrays(species)
-    @threads for jj in 1:size(v, 2)
+    for jj in 1:size(v, 2)
        @inbounds for i in 1:N
         j[i, jj] = q * w[jj] * v[i, jj]
       end
@@ -43,7 +43,7 @@ end
 
 
 function currentloadvector!(output, g::Grid{N,T}) where {N,T}
-  @threads for i in CartesianIndices(g.data)
+  for i in CartesianIndices(g.data)
     cellindices = indices(g, Tuple(i))
     currentloadvector!((@view output[cellindices]), g, i)
   end
@@ -63,14 +63,14 @@ function advance!(plasma::Plasma, g::Grid{N}, dt) where {N}
     x = position(species)
     v = velocity(species)
     _, EB = workarrays(species)
-    @inbounds @views @threads for i in 1:numberofparticles(species)
+    @inbounds @views for i in 1:numberofparticles(species)
       EB[:, i] .= zero(eltype(EB))
       advect!(x[:, i], v[:, i], dt/2)
       @. x[:, i] = mod(x[:, i] - lb, ub - lb) + lb
     end
     sort!(species, g) # sort into cells to get EB field efficiently
     electromagneticfield!(EB, g, cellids(species), x)
-    @inbounds @views @threads for i in 1:numberofparticles(species)
+    @inbounds @views for i in 1:numberofparticles(species)
       EB[:, i] .*= q_m
       qE_m = SVector{3, Float64}(EB[1:3, i])
       qB_m = SVector{3, Float64}(EB[4:6, i])
