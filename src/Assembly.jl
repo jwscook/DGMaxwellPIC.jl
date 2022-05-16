@@ -33,9 +33,9 @@ function zero!(s::SparseIJV)
 end
 
 function findneighbourgridindex(g::Grid{N}, homeindex, searchdir, side) where N
-  incremement = MVector{N,Int}(zeros(N))
-  incrememnt[searchdir] += (side == Low) ? -1 : 1
-  return SVector{N,Int}(mod1.(homeindex + incrememnt, size(g)))
+  increment = MVector{N,Int}(zeros(N))
+  increment[searchdir] += (side == Low) ? -1 : 1
+  return SVector{N,Int}(mod1.(homeindex .+ increment, size(g)))
 end
 function findneighbourcell(g::Grid{N}, homeindex, searchdir, side) where N
   return g[findneighbourgridindex(g, homeindex, searchdir, side)]
