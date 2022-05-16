@@ -52,7 +52,7 @@ ndimnodes(grid::Grid, i) = ndimnodes(grid, grid[i])
 function lumassmatrixkey(cell::Cell{N, T}, ignore::Int) where {N, T}
   return mapreduce(hash, hash, (jacobian(cell; ignore=ignore), dofshape(cell), T))
 end
-function lumassmatrix!(g::Grid{N,T}, cell::Cell{N, T}, ignore::Int=0) where {N, T}
+function lumassmatrix(g::Grid{N,T}, cell::Cell{N, T}, ignore::Int=0) where {N, T}
   key = lumassmatrixkey(cell, ignore)
   if !haskey(g.lummdict, key)
     throw(ErrorException("This needs to be made threadsafe"))

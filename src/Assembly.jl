@@ -33,8 +33,9 @@ function zero!(s::SparseIJV)
 end
 
 function findneighbourgridindex(g::Grid{N}, homeindex, searchdir, side) where N
-  gridsize = size(g)
-  return SVector{N,Int}(mod1(homeindex[j] + (searchdir == j) * ((side == Low) ? -1 : 1), gridsize[j]) for j in 1:N)
+  incremement = MVector{N,Int}(zeros(N))
+  incrememnt[searchdir] += (side == Low) ? -1 : 1
+  return SVector{N,Int}(mod1.(homeindex + incrememnt, size(g)))
 end
 function findneighbourcell(g::Grid{N}, homeindex, searchdir, side) where N
   return g[findneighbourgridindex(g, homeindex, searchdir, side)]
@@ -75,7 +76,7 @@ function surfacefluxstiffnessmatrix!(ijv::SparseIJV, g::Grid{N,T}, cellindex::Tu
   cell = g[cellindex]
   nodesi = NDimNodes(dofshape(cell), T)
   celldofindices = indices(g, cellindex)
-  lumm = lumassmatrix!(g, cell)
+  lumm = lumassmatrix(g, cell)
 
   fluxii = zeros(6ndofs(nodesi), 6ndofs(nodesi))
 
@@ -119,7 +120,7 @@ function _surfacefluxstiffnessmatrix!(output, g::Grid{N,T}, upwind=0.0) where {N
     nodesi = NDimNodes(dofshape(cell), T)
     flux = zeros(6ndofs(nodesi), 6ndofs(nodesi))
     celldofindices = indices(g, cellindex)
-    lumm = lumassmatrix!(g, cell)
+    lumm = lumassmatrix(g, cell)
     for dim in 1:N, (side, factor) in ((High, 1), (Low, -1))
       surfacefluxstiffnessmatrix!(flux, nodesi, nodesi, side, side, dim, upwind)
       flux .*= jacobian(cell; ignore=dim)
@@ -156,7 +157,7 @@ function volumefluxstiffnessmatrix!(output, g::Grid{N,T}) where {N,T}
   for i in CartesianIndices(g.data)
     cellindices = indices(g, Tuple(i))
     cell = g[i]
-    lumm = lumassmatrix!(g, cell)
+    lumm = lumassmatrix(g, cell)
     @views output[cellindices, cellindices] .+= volumefluxstiffnessmatrix(cell, lumm)
   end
   return output 
