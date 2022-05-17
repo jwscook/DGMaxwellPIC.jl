@@ -41,6 +41,6 @@ lower(c::Cell) = c.lower
 upper(c::Cell) = c.upper
 centre(c::Cell) = (lower(c) .+ upper(c)) ./ 2
 dofs!(c::Cell, x) = dofs!(state(c), x)
-zero!(c::Cell) = zero!(c.state)
+#zero!(c::Cell) = zero!(c.state)
 
 massmatrix(c::Cell{N,T}) where {N,T} = massmatrix(NDimNodes(dofshape(c), T)) * jacobian(c)

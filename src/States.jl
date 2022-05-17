@@ -15,7 +15,7 @@ end
 dofsindices(s::State, i::Int) = (s.dofshape[end] .* (i - 1) + 1):(s.dofshape[end] .* i)
 Base.size(s::State) = s.dofshape
 dofshape(s::State) = s.dofshape
-zero!(s::State) = fill!(s.q, 0)
+#zero!(s::State) = fill!(s.q, 0)
 state(s::State) = s
 nodes(s::State) = s.nodes
 workdofs(s::State{N}) where {N} = selectdim(s.q, N, dofsindices(s, 11))
