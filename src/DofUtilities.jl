@@ -1,5 +1,3 @@
-varsize(state::State, component) = size(state.q[component])
-varsize(cell::Cell, component) = varsize(cell.state, component)
 
 index(sizetuple, dim::Integer, side::FaceDirection) = side == Low ? 1 : sizetuple[dim]
 
@@ -18,8 +16,8 @@ end
 
 # should these belong here?
 for (fname, rnge) in ((:ndofs, 1:6), (:currentndofs, 7:9), (:totalndofs, 1:10))
-  @eval $(fname)(u::State) = sum(prod(size(u.q[i])) for i in $(rnge))
-  @eval $(fname)(u::State, components) = sum(prod(size(u.q[component])) for component in components)
+  @eval $(fname)(u::State) = prod(dofshape(u)) * length($rnge)
+  @eval $(fname)(u::State, components) = prod(dofshape(u)) * length(components)
   @eval $(fname)(c::Cell) = $(fname)(c.state)
   @eval $(fname)(c::Cell, i) = $(fname)(c.state, i)
   @eval $(fname)(g::Grid) = sum($(fname)(i) for i in g)

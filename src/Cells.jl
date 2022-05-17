@@ -28,10 +28,10 @@ function jacobian(c::Cell{N}; ignore=0) where N
 end
 
 state(c::Cell) = c.state
-dofs(c::Cell) = vcat(((@view c.state.q[i][:]) for i in 1:6)...) # TODO think about shape
-currentdofs(c::Cell) = vcat(((@view c.state.q[i][:]) for i in 7:9)...) # TODO think about shape
-chargedofs(c::Cell) = @view c.state.q[10]
-workdofs(c::Cell) = @view c.state.q[11]
+dofs(c::Cell) = vec(dofs(c.state, 1:6))
+currentdofs(c::Cell) = vec(dofs(c.state, 7:9))
+chargedofs(c::Cell) = vec(dofs(c.state, 10))
+workdofs(c::Cell) = vec(dofs(c.state, 11))
 referencex(x, c::Cell{N}) where {N} = @. ((x - c.lower) * c.inverselengths * 2 - 1)
 originalx(x, c::Cell{N}) where {N} = @. ((x + 1) /2 * (c.upper - c.lower) + c.lower)
 referencex!(x, c::Cell{N}) where {N} = (@. x = (x - c.lower) * c.inverselengths * 2 - 1)

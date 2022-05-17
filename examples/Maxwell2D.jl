@@ -1,7 +1,7 @@
 using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra, LoopVectorization
 
-const NX = 32;
-const NY = 8;
+const NX = 6;
+const NY = 5;
 
 const OX = 3;
 const OY = 5;
@@ -37,6 +37,8 @@ const upwind = 1
 
 @show "Assembling"
 const M = assemble(grid2D, upwind=upwind);
+@show M
+throw(error("asdgaga"))
 #@show "Building Crank-Nicolson"
 #const A = (I - M * dt / 2) \ Matrix(I + M * dt / 2);
 @show "Fetching dofs vector"

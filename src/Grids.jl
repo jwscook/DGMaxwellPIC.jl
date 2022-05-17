@@ -1,6 +1,6 @@
 
 struct Grid{N,T<:BasisFunctionType,U}
-  data::Array{Cell{N, T,U}, N}
+  data::Array{Cell{N, T, U}, N}
   lower::SVector{N,Float64}
   upper::SVector{N,Float64}
   inverselengths::SVector{N,Float64}
@@ -105,7 +105,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
 
   @eval function $(fnamedofs!)(s::State, data, component::Integer)
     @assert 1 <= component <= $len
-    s.q[component + $offset] .= data
+    dofs!(s, data, component + $offset)
   end
   @eval function $(fnamedofs!)(s::State, data)
     foreach(component->$(fnamedofs!)(s, data, component), 1:$len)
@@ -113,12 +113,12 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
 
   @eval function $(incrementfnamedofs!)(s::State, data, component::Integer)
     @assert 1 <= component <= $len
-    s.q[component + $offset] .+= data
+    incrementdofs!(s, data, component + $offset)
   end
 
   @eval function $(fnamedofs)(s::State, component::Integer)
     @assert 1 <= component <= $len
-    return s.q[component + $offset]
+    dofs(s, component + $offset)
   end
 
   @eval function $(privatefname!)(dofs, x, component::Integer, value,
@@ -330,10 +330,10 @@ end
 componentindexoffset(cell::Cell, component::Integer) = componentindexoffset(state(cell), component)
 
 function componentindexoffset(s::State, component::Integer)
-  1 <= component <= length(s.q) || throw(ArgumentError("Cannot access component $component"))
+  1 <= component <= 11 || throw(ArgumentError("Cannot access component $component"))
   ind = 0
   for i in 1:component-1
-    ind += length(s.q[component])
+    ind += prod(dofshape(s))
   end
   return ind
 end
