@@ -18,8 +18,8 @@ function depositcurrent!(g::Grid{N}, plasma::Plasma) where N
     v = velocity(species)
     w = weight(species)
     q = charge(species)
-    j, _ = workarrays(species)
-    for jj in 1:size(v, 2)
+    j, _, _ = workarrays(species)
+    @threads for jj in 1:size(v, 2)
        @inbounds for i in 1:N
         j[i, jj] = q * w[jj] * v[i, jj]
       end
@@ -38,12 +38,12 @@ function currentloadvector!(output, g::Grid{N, T}, cellindex) where {N,T}
   lumm = lumassmatrix(g, cell)
   @views output[1:3nc] .= currentdofs(cell) # ∇×B = μJ + μϵ ∂E/∂t # yes electric current
   #No-op #@views output[3nc+1:6nc] .= 0 # ∂B/∂t = - ∇×E # no magnetic current
-  ldiv!(lumm, output)
+  #ldiv!(lumm, output)
 end
 
 
 function currentloadvector!(output, g::Grid{N,T}) where {N,T}
-  for i in CartesianIndices(g.data)
+  @threads for i in CartesianIndices(g.data)
     cellindices = indices(g, Tuple(i))
     currentloadvector!((@view output[cellindices]), g, i)
   end
@@ -55,25 +55,29 @@ function currentsource!(output, g::Grid)
 end
 
 
-function advance!(plasma::Plasma, g::Grid{N}, dt) where {N}
+function advance!(plasma::Plasma, g::Grid{N}, dt, gg=missing, tfrac=nothing) where {N}
   lb = lower(g)
   ub = upper(g)
   for species in plasma
     q_m = charge(species) / mass(species)
     x = position(species)
     v = velocity(species)
-    _, EB = workarrays(species)
-    @inbounds @views for i in 1:numberofparticles(species)
+    _, EB, EB2 = workarrays(species)
+    @inbounds @views @threads for i in 1:numberofparticles(species)
       EB[:, i] .= zero(eltype(EB))
+      ismissing(gg) || (EB2[:, i] .= zero(eltype(EB2)))
       advect!(x[:, i], v[:, i], dt/2)
       @. x[:, i] = mod(x[:, i] - lb, ub - lb) + lb
     end
     sort!(species, g) # sort into cells to get EB field efficiently
     electromagneticfield!(EB, g, cellids(species), x)
-    @inbounds @views for i in 1:numberofparticles(species)
+    ismissing(gg) || electromagneticfield!(EB2, gg, cellids(species), x)
+    @inbounds @views @threads for i in 1:numberofparticles(species)
       EB[:, i] .*= q_m
       qE_m = SVector{3, Float64}(EB[1:3, i])
       qB_m = SVector{3, Float64}(EB[4:6, i])
+      ismissing(gg) || (qE_m = qE_m * (1-tfrac) + SVector{3, Float64}(EB2[1:3, i]) * tfrac)
+      ismissing(gg) || (qB_m = qB_m * (1-tfrac) + SVector{3, Float64}(EB2[4:6, i]) * tfrac)
       borispush!(x[:, i], v[:, i], qE_m, qB_m, dt, Val(N))
       advect!(x[:, i], v[:, i], dt/2)
       @. x[:, i] = mod(x[:, i] - lb, ub - lb) + lb

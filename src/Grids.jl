@@ -269,7 +269,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
       i12 = searchsorted(cellids, i)
       isempty(i12) && continue
       cell = g[i]
-      $(fname!)(cell, ndimnodes(g, cell), (@view x[:, i12]), arg)
+      $(fname!)(cell, ndimnodes(g, cell), (@view x[:, i12]), (@view arg[:, i12]))
     end
   end
 

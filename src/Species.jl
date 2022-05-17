@@ -26,7 +26,6 @@ for fname in (:position, :velocity, :weight, :xposition, :yposition, :zposition,
   @eval $(fname!)(s::Species) = $(fname!)(s.particledata)
   @eval $(fname!)(s::Species, args...) = $(fname!)(s.particledata, args...)
 end
-workarrays(s::Species) = (s.particledata.work3, s.particledata.work6)
+workarrays(s::Species) = (s.particledata.work3, s.particledata.work6a, s.particledata.work6b)
 ids(s::Species) = ids(s.particledata)
 
-#current(s::Species) = velocity(s) .* s.charge .* weight(s)

@@ -7,7 +7,8 @@ struct ParticleData{N, T<:AbstractArray}
   perm::Vector{Int64}
   id::Vector{Int64}
   work3::Matrix{Float64}
-  work6::Matrix{Float64}
+  work6a::Matrix{Float64}
+  work6b::Matrix{Float64}
   workN31::Matrix{Float64}
   workint1::Vector{Int64}
   workint2::Vector{Int64}
@@ -19,6 +20,7 @@ struct ParticleData{N, T<:AbstractArray}
       zeros(Int64, npart),
       collect(1:npart),
       zeros(Float64, 3, npart),
+      zeros(Float64, 6, npart),
       zeros(Float64, 6, npart),
       zeros(Float64, size(data)...),
       zeros(Int64, npart),
@@ -37,14 +39,14 @@ Base.eltype(p::ParticleData) = eltype(p.data)
 function Base.sort!(p::ParticleData{N}, g::Grid) where N
   x = position(p)
   linear = LinearIndices(size(g))
-  @inbounds for i in 1:size(p.data, 2)
+  @inbounds @threads for i in 1:size(p.data, 2)
     index = cellid(g, SVector{N,eltype(p)}(@view x[:, i]))
     @assert !isnothing(index)
     p.cellids[i] = linear[CartesianIndex(Tuple(index))]
     @assert 0 < p.cellids[i] <= length(g)
   end
   sortperm!(p.perm, p.cellids)
-  @inbounds for j in 1:size(p.data, 2)
+  @inbounds @threads for j in 1:size(p.data, 2)
     permj = p.perm[j]
     for i in axes(p.data, 1)
       p.workN31[i, j] = p.data[i, permj]
@@ -52,7 +54,7 @@ function Base.sort!(p::ParticleData{N}, g::Grid) where N
     p.workint1[j] = p.cellids[permj]
     p.workint2[j] = p.id[permj]
   end
-  @inbounds for j in 1:size(p.data, 2)
+  @inbounds @threads for j in 1:size(p.data, 2)
     for i in axes(p.data, 1)
       p.data[i, j] = p.workN31[i, j]
     end

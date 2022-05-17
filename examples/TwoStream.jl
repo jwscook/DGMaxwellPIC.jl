@@ -30,7 +30,7 @@ function foo()
   dataxvw[1:DIMS, :] .= rand(DIMS, NP) .* (b .- a) .+ a
   dataxvw[DIMS+1, :] .= rand((-1, 1), NP)
   particledata = DGMaxwellPIC.ParticleData(dataxvw);
-  weight!(particledata, 32 * pi^2 / 2 * area / length(particledata) / 10);
+  weight!(particledata, 32 * pi^2 / 2 * area / length(particledata));
   
   plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)]);
   sort!(plasma, grid2D) # sort particles by cellid
@@ -45,7 +45,7 @@ function foo()
   S = deepcopy(u);
   
   dtc = norm((b .- a)./sqrt((NX * OX)^2 + (NY * OY)^2)) / DGMaxwellPIC.speedoflight
-  dt = dtc * 0.1
+  dt = dtc * 0.2
   
   grid2Dcopy = deepcopy(grid2D)
   sort!(plasma, grid2Dcopy)
@@ -78,8 +78,10 @@ function foo()
   end
 
   to = TimerOutput()
-  ngifevery = 8
-  NI = 128#4196
+  ngifevery = Int(ceil((b[1]-a[1])/2NX / dt))
+  nturns = 2
+  NI = Int(ceil((b[1]-a[1]) / dt)) * nturns
+  @show nturns, ngifevery, NI
   @gif for i in 1:NI
     @timeit to "advance!" advance!(plasma, grid2D, dt/2)
     @timeit to "deposit" depositcurrent!(grid2D, plasma)
