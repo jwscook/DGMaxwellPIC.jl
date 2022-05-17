@@ -25,26 +25,29 @@ function dofs(s::State{N}, components::Union{Int,UnitRange{Int}}=1:6) where N
   return selectdim(s.q, N, inds)
 end
 
-function dofs!(s::State{N}, x::Number, components=1:16) where N
-  for i in components
-    selectdim(s.q, N, dofsindices(s, i)) .= x
-  end
-  return s
+function dofs!(s::State{N}, x, component::Integer) where N
+  selectdim(s.q, N, dofsindices(s, component)) .= x
 end
 
-function dofs!(s::State{N}, x::AbstractArray, components=1:6) where N
-  for i in components
-    sqi = selectdim(s.q, N, dofsindices(s, i))
+function dofs!(s::State{N}, x::AbstractArray, components::UnitRange{Int}=1:6) where N
+  l = prod(dofshape(s))
+  for (i, c) in enumerate(components)
+    sqi = selectdim(s.q, N, dofsindices(s, c))
     for j in LinearIndices(dofshape(s))
-      sqi[j] = x[j]
+      sqi[j] = x[(i-1)*l+j]
     end
   end
   return s
 end
 
-function incremementdofs!(s::State{N}, x, component::Integer) where N
-  sqi = selectdim(s.q, N, dofsindices(s, component))
-  qi[j] .+= x
+function incremementdofs!(s::State{N}, x::AbstractArray, components::UnitRange{Int}=1:6) where N
+  l = prod(dofshape(s))
+  for (i, c) in enumerate(components)
+    sqi = selectdim(s.q, N, dofsindices(s, c))
+    for j in LinearIndices(dofshape(s))
+      sqi[j] += x[(i-1)*l+j]
+    end
+  end
   return s
 end
 
