@@ -1,6 +1,6 @@
 
 struct Grid{N,T<:BasisFunctionType,U}
-  data::Array{Cell{N, T,U}, N}
+  data::Array{Cell{N, T, U}, N}
   lower::SVector{N,Float64}
   upper::SVector{N,Float64}
   inverselengths::SVector{N,Float64}
@@ -222,11 +222,11 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     lagrange!(dofs, nodes, x->f(originalx(x, c)))
     $(fnamedofs!)(state(c), dofs, component) # are dofs a reference, so is this even needed?
   end
-  @eval function $(fname!)(c::Cell, nodes, f::F) where {F<:Function}
-    for component in 1:$len
-      $(fname!)(c, nodes, x->f(originalx(x, c))[component], component)
-    end
-  end
+  #@eval function $(fname!)(c::Cell, nodes, f::F) where {F<:Function}
+  #  for component in 1:$len
+  #    $(fname!)(c, nodes, x->f(originalx(x, c))[component], component)
+  #  end
+  #end
 
 #  @eval function $(fname)(g::Grid{N}, args::Vararg) where {N}
  @eval function $(fname)(g::Grid{N}, x, component) where {N}

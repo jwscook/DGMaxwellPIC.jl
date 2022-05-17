@@ -37,6 +37,7 @@ const upwind = 1
 
 @show "Assembling"
 const M = assemble(grid2D, upwind=upwind);
+
 #@show "Building Crank-Nicolson"
 #const A = (I - M * dt / 2) \ Matrix(I + M * dt / 2);
 @show "Fetching dofs vector"

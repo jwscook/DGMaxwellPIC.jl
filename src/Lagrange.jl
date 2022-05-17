@@ -48,6 +48,7 @@ struct NDimNodes{N,T<:AbstractLagrangeNodes}
   uniqueid::UInt64
   works::Vector{Array{Float64, N}}
   lumm::LU{Float64, Matrix{Float64}}
+  size::NTuple{N,Int}
   function NDimNodes(nodes::NTuple{N,T}) where {N,T}
     work = zeros(Float64, (length(n) for n in nodes)...)
     works = [deepcopy(work) for i in 1:nthreads()]
@@ -55,10 +56,11 @@ struct NDimNodes{N,T<:AbstractLagrangeNodes}
     uniqueid = mapreduce(hash, hash, nodes)
     fakenew = new{N,T}(nodes, uniqueid, works, lu(ones(1,1)))
     lumm = lu(massmatrix(fakenew, fakenew))
-    return new{N,T}(nodes, uniqueid, works, lumm)
+    syze = Tuple(length.(nodes))
+    return new{N,T}(nodes, uniqueid, works, lumm, syze)
   end
 end
-Base.size(n::NDimNodes) = Tuple(length(n.nodes[i]) for i in eachindex(n))
+Base.size(n::NDimNodes) = n.size
 Base.hash(n::NDimNodes) = n.uniqueid
 ndofs(n::NDimNodes) = prod(length, n.nodes)
 workarray(n::NDimNodes, tid) = n.works[tid]
@@ -159,7 +161,7 @@ end
 function lagrange!(dofs, nodes::NDimNodes, f::F,
     solvedofsornot::MaybeSolveDofs=SolveDofsNow()) where {F<:Function}
   a, b = _a(nodes), _b(nodes)
-  @assert size(dofs) == Tuple(length(n) for n in nodes)
+  @assert size(dofs) == size(nodes)
   @inbounds for i in CartesianIndices(dofs)
     dofs[i] = HCubature.hcubature(x->f(x) * lagrange(x, nodes, Tuple(i)), a, b,
                                   atol=ATOL, rtol=sqrt(eps()))[1]
