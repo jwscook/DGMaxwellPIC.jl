@@ -1,10 +1,10 @@
-using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LoopVectorization, StatProfilerHTML
+using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LoopVectorization, StatProfilerHTML, IterativeSolvers
 
 function foo()
-  NX = 32;
-  NY = 16;
+  NX = 64;
+  NY = 4;
   
-  OX = 3;
+  OX = 5;
   OY = 5;
   
   state2D = State([OX, OY], LegendreNodes);
@@ -18,76 +18,73 @@ function foo()
   gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
   
   grid2D = Grid([Cell(deepcopy(state2D), gridposition(((i-1)/NX, (j-1)/NY)), gridposition((i/NX, j/NY))) for i in 1:NX, j in 1:NY]);
-  
+
   #function distributionfunction(xv)
   #  x = xv[1:2]
   #  v = xv[3:5]
   #  return exp(-sum(v.^2))
   #end
-  NP = NX * NY * OX * OY * 32
+  NP = NX * NY * OX * OY * 8
   
   dataxvw = zeros(DIMS + 3 + 1, NP);
   dataxvw[1:DIMS, :] .= rand(DIMS, NP) .* (b .- a) .+ a
   dataxvw[DIMS+1, :] .= rand((-1, 1), NP)
   particledata = DGMaxwellPIC.ParticleData(dataxvw);
-  weight!(particledata, 32 * pi^2 / 2 * area / length(particledata));
+  weight!(particledata, 32 * pi^2 / 2 * area / length(particledata) * 10);
+
   
   plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)]);
   sort!(plasma, grid2D) # sort particles by cellid
+  plasmacopy = deepcopy(plasma)
   
   A = assemble(grid2D);
   u = dofs(grid2D);
-  k1 = deepcopy(u);
-  k2 = deepcopy(u);
-  k3 = deepcopy(u);
-  k4 = deepcopy(u);
+  u1 = deepcopy(u);
   work = deepcopy(u);
   S = deepcopy(u);
+  S1 = deepcopy(u);
   
   dtc = norm((b .- a)./sqrt((NX * OX)^2 + (NY * OY)^2)) / DGMaxwellPIC.speedoflight
-  dt = dtc * 0.2
+  dtfields = dtc
+  dtparticles = norm(b .- a) / sqrt(NX^2 + NY^2)  * 0.2
+  nsubsteps = Int(ceil(dtfields / dtparticles)) # find round number
+  dtparticles = dtfields / nsubsteps # correct particle substep dt
+
+  CN⁻ = I - A * dtfields / 2;
+  CN⁺ = I + A * dtfields / 2;
+  workmatrix = deepcopy(A);
   
   grid2Dcopy = deepcopy(grid2D)
   sort!(plasma, grid2Dcopy)
  
-  function myaxpy!(w, a, x, y)
-    @tturbo for i in eachindex(y)
-      w[i] = a * x[i] + y[i] 
-    end
-  end
-  function rksubstep!(y, w, A, u, k, a)
-    myaxpy!(w, a, k, u)
-    mul!(y, A, w)
-  end
-  
-  function stepfieldsHeun!(u, M, k1, k2, work, dt, S)
-    @timeit to "k1 =" mul!(k1, M, u)
-    @timeit to "work =" myaxpy!(work, dt, k1, u)
-    @timeit to "k2 =" mul!(k2, M, work)
-    @timeit to "u .+= Heun" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + k2[i]) / 2; end
-    @timeit to "u .+= S" @tturbo for i in eachindex(u); u[i] += S[i]; end
-  end
-
-  function stepfieldsRK4!(u, M, k1, k2, k3, k4, work, dt, S)
-    @timeit to "k1 =" mul!(k1, M, u)
-    @timeit to "k2 =" rksubstep!(k2, work, M, u, k1, dt/2)
-    @timeit to "k3 =" rksubstep!(k3, work, M, u, k2, dt/2)
-    @timeit to "k4 =" rksubstep!(k4, work, M, u, k3, dt)
-    @timeit to "u .+= RK4" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
-    @timeit to "u .+= S" @tturbo for i in eachindex(u); u[i] += S[i]; end
-  end
-
   to = TimerOutput()
-  ngifevery = Int(ceil((b[1]-a[1])/2NX / dt))
-  nturns = 2
-  NI = Int(ceil((b[1]-a[1]) / dt)) * nturns
+  ngifevery = Int(ceil((b[1]-a[1])/8NX / dtfields))
+  nturns = 4.0
+  NI = Int(ceil((b[1]-a[1]) / dtfields * nturns))
   @show nturns, ngifevery, NI
   @gif for i in 1:NI
-    @timeit to "advance!" advance!(plasma, grid2D, dt/2)
-    @timeit to "deposit" depositcurrent!(grid2D, plasma)
-    @timeit to "source" sources!(S, grid2D)
-    @timeit to "stepfields" stepfieldsRK4!(u, A, k1, k2, k3, k4, work, dt, S)
-    @timeit to "advance!" advance!(plasma, grid2D, dt/2)
+    u1 .= u
+    for _ in 1:5 # convergence
+      copyto!(plasma, plasmacopy)
+      @timeit to "deposit" depositcurrent!(grid2D, plasma)
+      @timeit to "source" (sources!(S, grid2D); S .*= dtfields)
+      @timeit to "stepfields" @tturbo for i in eachindex(CN⁺); workmatrix[i] = CN⁺[i]; end
+      @timeit to "stepfields" @tturbo for i in 1:size(CN⁺, 1); workmatrix[i, i] += S[i]; end
+      @timeit to "stepfields" mul!(work, workmatrix, u)
+      @timeit to "stepfields" @tturbo for i in eachindex(CN⁻); workmatrix[i] = CN⁻[i]; end
+      @timeit to "stepfields" @tturbo for i in 1:size(CN⁻, 1); workmatrix[i, i] += S1[i]; end
+      @timeit to "stepfields" bicgstabl!(u1, CN⁻ + diagm(S1), work)
+      @timeit to "stepfields" bicgstabl!(u1, CN⁻ + diagm(S1), mul!(work, (workmatrix .= CN⁺ .+ diagm(S)), u))
+      @timeit to "stepfields" bicgstabl!(u1, CN⁻ + diagm(S1), mul!(work, CN⁺ + diagm(S), u))
+      @timeit to "dofs!" dofs!(grid2Dcopy, u1)
+      for j in 1:nsubsteps
+        @timeit to "advance!" advance!(plasma, grid2D, dtfields, grid2Dcopy, j / nsubsteps)
+      end
+      @timeit to "deposit" depositcurrent!(grid2D, plasma)
+      @timeit to "source" (sources!(S1, grid2D); S1 .*= dtfields)
+    end
+    u .= u1
+    copyto!(plasmacopy, plasma)
     @timeit to "dofs!" dofs!(grid2D, u)
 #    if i == 1
 #      @profilehtml begin

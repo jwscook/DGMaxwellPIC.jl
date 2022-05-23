@@ -1,8 +1,16 @@
 struct Plasma{T}
   species::Vector{T}
 end
+Base.eachindex(p::Plasma) = eachindex(p.species)
 Base.iterate(p::Plasma) = iterate(p.species)
 Base.iterate(p::Plasma, i) = iterate(p.species, i)
+
+function Base.copyto!(a::Plasma, b::Plasma)
+  for i in eachindex(a)
+    copyto!(a.species[i], b.species[i])
+  end
+end
+
 
 function Base.sort!(p::Plasma, g::Grid)
   for s in p
@@ -34,11 +42,8 @@ function currentloadvector!(output, g::Grid{N, T}, cellindex) where {N,T}
   cell = g[cellindex]
   nc = ndofs(cell, 1) # number of dofs per component
   @assert length(output) == 6nc "$(length(output)) vs $(6nc)"
-  nodes = ndimnodes(g, cellindex)
-  lumm = lumassmatrix(g, cell)
   @views output[1:3nc] .= currentdofs(cell) # ∇×B = μJ + μϵ ∂E/∂t # yes electric current
   #No-op #@views output[3nc+1:6nc] .= 0 # ∂B/∂t = - ∇×E # no magnetic current
-  #ldiv!(lumm, output)
 end
 
 

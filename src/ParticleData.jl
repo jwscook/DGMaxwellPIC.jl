@@ -3,9 +3,9 @@ abstract type AbstractParticleSampler end
 
 struct ParticleData{N, T<:AbstractArray}
   data::T # X, V, W (N positions, 3 velocities, 1 weight)
+  id::Vector{Int64}
   cellids::Vector{Int64}
   perm::Vector{Int64}
-  id::Vector{Int64}
   work3::Matrix{Float64}
   work6a::Matrix{Float64}
   work6b::Matrix{Float64}
@@ -16,9 +16,9 @@ struct ParticleData{N, T<:AbstractArray}
     npart = size(data, 2)
     @assert npart > 0
     return new{size(data, 1) - 4, typeof(data)}(data,
-      zeros(Int64, npart),
-      zeros(Int64, npart),
       collect(1:npart),
+      zeros(Int64, npart),
+      zeros(Int64, npart),
       zeros(Float64, 3, npart),
       zeros(Float64, 6, npart),
       zeros(Float64, 6, npart),
@@ -63,6 +63,14 @@ function Base.sort!(p::ParticleData{N}, g::Grid) where N
   end
   return p
 end
+
+function Base.copyto!(a::ParticleData, b::ParticleData)
+  copyto!(a.data, b.data)
+  copyto!(a.id, b.id)
+  copyto!(a.cellids, b.cellids)
+end
+
+
 
 position(p::ParticleData{N}, i::Integer) where {N} = p.data[1:N, i]
 velocity(p::ParticleData{N}, i::Integer) where {N} = p.data[N+1:N+3, i]

@@ -1,9 +1,9 @@
-using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra, LoopVectorization
+using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LinearAlgebra, LoopVectorization, SuiteSparse, IterativeSolvers
 
 const NX = 32;
 const NY = 8;
 
-const OX = 3;
+const OX = 4;
 const OY = 5;
 
 const state2D = State([OX, OY], LegendreNodes);
@@ -32,14 +32,17 @@ electricfield!(grid2D, fE, 2);
 magneticfield!(grid2D, fB, 3);
 
 const dtc = norm((b .- a)./sqrt((NX * OX)^2 + (NY * OY)^2)) / DGMaxwellPIC.speedoflight
-const dt = dtc * 0.1
+const dt = dtc * 1.0
 const upwind = 1
 
 @show "Assembling"
 const M = assemble(grid2D, upwind=upwind);
 
 #@show "Building Crank-Nicolson"
-#const A = (I - M * dt / 2) \ Matrix(I + M * dt / 2);
+#const A = (I - Matrix(M) * dt / 2) \ Matrix(I + Matrix(M) * dt / 2);
+const CN⁻ = I - M * dt / 2;
+const CN⁺ = I + M * dt / 2;
+#const luCN⁻ = lu(CN⁻);
 @show "Fetching dofs vector"
 const u = deepcopy(dofs(grid2D));
 const k1 = deepcopy(u);
@@ -53,20 +56,37 @@ const nturns = 1
 const NI = Int(ceil(nturns * L[1] / s0 / dt))
 const to = TimerOutput()
 
-function substep!(y, w, A, u, k, a)
+function myaxpy!(w, a, x, y)
   @tturbo for i in eachindex(y)
-    w[i] = u[i] + k[i] * a
+    w[i] = a * x[i] + y[i]
   end
+end
+function rksubstep!(y, w, A, u, k, a)
+  myaxpy!(w, a, k, u)
   mul!(y, A, w)
 end
 
-@gif for i in 1:NI
+function stepfieldsHeun!(u, M, k1, k2, work, dt)
   @timeit to "k1 =" mul!(k1, M, u)
-  @timeit to "k2 =" substep!(k2, work, M, u, k1, dt/2)
-  @timeit to "k3 =" substep!(k3, work, M, u, k2, dt/2)
-  @timeit to "k4 =" substep!(k4, work, M, u, k3, dt)
-  @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
+  @timeit to "work =" myaxpy!(work, dt, k1, u)
+  @timeit to "k2 =" mul!(k2, M, work)
+  @timeit to "u .+= " @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + k2[i]) / 2; end
+end
+
+function stepfieldsRK4!(u, M, k1, k2, k3, k4, work, dt)
+  @timeit to "k1 =" mul!(k1, M, u)
+  @timeit to "k2 =" rksubstep!(k2, work, M, u, k1, dt/2)
+  @timeit to "k3 =" rksubstep!(k3, work, M, u, k2, dt/2)
+  @timeit to "k4 =" rksubstep!(k4, work, M, u, k3, dt)
+  @timeit to "u .+= " @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
+end
+
+@gif for i in 1:NI
+  #@timeit to "stepfieldsRK4" stepfieldsRK4!(u, M, k1, k2, k3, k4, work, dt)
+  #@timeit to "stepfieldsHuen" stepfieldsHeun!(u, M, k1, k2, work, dt)
   #@timeit to "u .= A * u" u .= A * u
+  #@timeit to "u .= lu(CN⁻) * CN⁺ * u" SuiteSparse.UMFPACK.solve!(u, luCN⁻, mul!(work, CN⁺, z), 0)
+  @timeit to "u .= bigcgstabl! CN" bicgstabl!(u, CN⁻, mul!(work, CN⁺, u), reltol=1000eps())
   if i % ngifevery == 1 # only do this if we need to make plots
     @timeit to "dofs!" dofs!(grid2D, u)
   end

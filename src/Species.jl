@@ -7,6 +7,12 @@ end
 
 Base.sort!(s::Species, g::Grid) = sort!(s.particledata, g)
 
+function Base.copyto!(a::Species, b::Species)
+  @assert a.charge == b.charge
+  @assert a.mass == b.mass
+  copyto!(a.particledata, b.particledata)
+end
+
 charge(s::Species) = s.charge
 mass(s::Species) = s.mass
 numberofparticles(s::Species) = length(s.particledata)
