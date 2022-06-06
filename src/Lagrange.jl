@@ -17,13 +17,21 @@ for (stub, fname, orthog) in ((:Legendre, gausslegendre, true), (:Lobatto, gauss
     nodes::Vector{Float64}
     weights::Vector{Float64}
     invdenominators::Vector{Float64}
+    integrals::Vector{Float64}
     uniqueid::UInt64
+    function $(structname)(nodes, weights, invdenominators, integrals, uniqueid)
+      output = new(nodes, weights, invdenominators, integrals, uniqueid)
+      integral(i) = QuadGK.quadgk(x->output(x, i), -1, 1, rtol=2eps(), -1, 1)[1]
+      output.integrals .= [integral(i) for i in eachindex(nodes)]
+      return output
+    end
   end
   @eval function $(structname)(N::Int)
     n, w = $(fname)(N)
     invdenominators = [mapreduce(j->isequal(i, j) ? one(eltype(n)) : (1 / (n[i] - n[j])), *, eachindex(n)) for i in eachindex(n)]
     uniqueid = mapreduce(hash, hash, (n, w, invdenominators))
-    return $(structname)(n, w, invdenominators, uniqueid)
+    integrals = zeros(N)
+    return $(structname)(n, w, invdenominators, integrals, uniqueid)
   end
 end
 function Base.isequal(a::AbstractLagrangeNodes, b::AbstractLagrangeNodes)
@@ -42,6 +50,7 @@ nodes(n::AbstractLagrangeNodes) = n.nodes
 weights(n::AbstractLagrangeNodes) = n.weights
 uniqueid(n::AbstractLagrangeNodes) = n.uniqueid
 Base.eltype(n::AbstractLagrangeNodes) = Float64
+integral(n::AbstractLagrangeNodes, i) = n.integrals[i]
 
 struct NDimNodes{N,T<:AbstractLagrangeNodes}
   nodes::NTuple{N,T} # Tuple of <:AbstractLagrangeNodes
@@ -64,6 +73,15 @@ Base.size(n::NDimNodes) = n.size
 Base.hash(n::NDimNodes) = n.uniqueid
 ndofs(n::NDimNodes) = prod(length, n.nodes)
 workarray(n::NDimNodes, tid) = n.works[tid]
+
+function integral(n::NDimNodes{N}, dofs::AbstractMatrix) where {N}
+  output = 0.0
+  for i in CartesianIndices(dofs)
+    j = Tuple(i)
+    output += dofs[i] * prod(integral(n.nodes[d], j[d]) for d in 1:N)
+  end
+  return output
+end
 
 _a(::Val{N}) where N = -(@SArray ones(N))
 _b(::Val{N}) where N = @SArray ones(N)

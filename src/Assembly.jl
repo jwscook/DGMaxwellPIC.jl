@@ -171,4 +171,25 @@ function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
   return output
 end
 
+function currentloadvector!(output, g::Grid{N, T}, cellindex) where {N,T}
+  cell = g[cellindex]
+  nc = ndofs(cell, 1) # number of dofs per component
+  @assert length(output) == 6nc "$(length(output)) vs $(6nc)"
+  @views output[1:3nc] .= currentdofs(cell) # ∇×B = μJ + μϵ ∂E/∂t # yes electric current
+  #No-op #@views output[3nc+1:6nc] .= 0 # ∂B/∂t = - ∇×E # no magnetic current
+end
+
+
+function currentloadvector!(output, g::Grid{N,T}) where {N,T}
+  @threads for i in CartesianIndices(g.data)
+    cellindices = indices(g, Tuple(i))
+    currentloadvector!((@view output[cellindices]), g, i)
+  end
+  return output
+end
+
+function currentsource!(output, g::Grid)
+  return currentloadvector!(output, g)
+end
+
 

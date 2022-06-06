@@ -79,9 +79,9 @@ function foo()
   end
 
   to = TimerOutput()
-  ngifevery = Int(ceil((b[1]-a[1])/8NX / dt))
+  ngifevery = Int(ceil((b[1]-a[1])/8NX / dt * v0))
   nturns = 0.5
-  NI = Int(ceil((b[1]-a[1]) / dt * nturns))
+  NI = Int(ceil((b[1]-a[1]) / dt * nturns * v0))
   @show nturns, ngifevery, NI
   @gif for i in 1:NI
     @timeit to "advance!" advance!(plasma, grid2D, dt) # pretend plasma is 1/2 timestep behind fields, so leapfrog to n+1/2

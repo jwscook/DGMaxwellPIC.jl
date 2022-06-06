@@ -27,6 +27,8 @@ function likelycellindex(g::Grid{N}, x) where N
   lb = lower(g)
   il = inverselengths(g)
   ind = SVector{N,Int}(Int.(ceil.(size(g) .* (x .- lb) .* il)))
+  any(<(1), ind) && throw(DomainError("Position $x is out of bounds"))
+  any(ij->ij[1] > ij[2], zip(ind, size(g))) && throw(DomainError("Position $x is out of bounds"))
   return ind
 end
 Base.size(g::Grid) = size(g.data)
@@ -207,7 +209,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
       #$(privatefname!)(dofs, z, i, (@view values[i, :]), DelayDofsSolve(), nodes)
       $(privatefname!)(dofs, x, i, (@view values[i, :]), DelayDofsSolve(), nodes) # this is allocating
       maybesolvedofs!(dofs, nodes, SolveDofsNow())
-      dofs .*= jacobian(c)
+      dofs ./= jacobian(c)
       $(incrementfnamedofs!)(s, dofs, i)
     end
     originalx!(x, c)
@@ -222,20 +224,12 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     lagrange!(dofs, nodes, x->f(originalx(x, c)))
     $(fnamedofs!)(state(c), dofs, component) # are dofs a reference, so is this even needed?
   end
-  #@eval function $(fname!)(c::Cell, nodes, f::F) where {F<:Function}
-  #  for component in 1:$len
-  #    $(fname!)(c, nodes, x->f(originalx(x, c))[component], component)
-  #  end
-  #end
 
-#  @eval function $(fname)(g::Grid{N}, args::Vararg) where {N}
- @eval function $(fname)(g::Grid{N}, x, component) where {N}
-#    x = args[1]
+  @eval function $(fname)(g::Grid{N}, x, component) where {N}
     c = cell(g, x)
     nodes = ndimnodes(g, c)
     isnothing(c) && return zeros(eltype(x), $(len))
-    return $(fname)(state(c), nodes, referencex(x, c), component)#args[2:end]...)
-    #return $(fname)(state(c), nodes, referencex(x, c), args[2:end]...)
+    return $(fname)(state(c), nodes, referencex(x, c), component)
   end
 
   @eval function $(fname)(g::Grid, component::Integer)
@@ -310,14 +304,14 @@ function cellcentres(g::Grid{N}) where {N}
 end
 
 function cellid(g::Grid{N}, x)::SVector{N, Int64} where {N}
-  @inbounds index = likelycellindex(g, x)
-  @inbounds inxg = in(x, g[index]) && return index
+  index = likelycellindex(g, x)
+  inxg = in(x, g[index]) && return index
   for i in CartesianIndices(g.data)
     if in(x, g[i])
       return SVector{N,Int}(Tuple(i))
     end
   end
-  throw(ErrorException("Shouldnt be able to get here: $lb, $x, $ub"))
+  throw(ErrorException("Shouldnt be able to get here: $x"))
 end
 
 function cell(g::Grid, x)
@@ -345,6 +339,7 @@ end
 
 divB(g::Grid, x) = divergence(g, x, magneticfield)
 divE(g::Grid, x) = divergence(g, x, electricfield)
+divJ(g::Grid, x) = divergence(g, x, currentfield)
 
 sources!(output, g::Grid) = -speedoflight^2 * mu0 * currentsource!(output, g)
 
