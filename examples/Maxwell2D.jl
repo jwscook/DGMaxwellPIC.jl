@@ -87,9 +87,7 @@ end
   #@timeit to "u .= A * u" u .= A * u
   #@timeit to "u .= lu(CN⁻) * CN⁺ * u" SuiteSparse.UMFPACK.solve!(u, luCN⁻, mul!(work, CN⁺, z), 0)
   @timeit to "u .= bigcgstabl! CN" bicgstabl!(u, CN⁻, mul!(work, CN⁺, u), reltol=1000eps())
-  if i % ngifevery == 0 # only do this if we need to make plots
-    @timeit to "dofs!" dofs!(grid2D, u)
-  end
+  @timeit to "dofs!" dofs!(grid2D, u)
   Eyresult = [electricfield(grid2D, xi, 2) for xi in centres]
   Eexpected = Matrix([fE(centres[ii,jj], i * dt) for ii in 1:NX, jj in 1:NY])
   Bexpected = Matrix([fB(centres[ii,jj], i * dt) for ii in 1:NX, jj in 1:NY])
