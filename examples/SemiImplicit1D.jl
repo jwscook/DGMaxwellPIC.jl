@@ -60,7 +60,7 @@ function foo()
   end
 
   to = TimerOutput()
-  ngifevery = max(2, Int(ceil((b[1]-a[1])/NX / dtimplicit))) * 2
+  ngifevery = max(2, Int(ceil((b[1]-a[1])/NX / dtimplicit))) * 8
   nturns = 2.0
   NI = Int(ceil((b[1]-a[1]) * nturns / (dtimplicit * v0)))
   cellxingtime = (b[1] - a[1]) / NX / v0
@@ -93,6 +93,13 @@ function foo()
         @timeit to "advance!" advance!(plasmafuture, grid1D, dtimplicit / nsubsteps,
           grid1Dfuture, (j-0.5)/nsubsteps)
       end
+
+##      @profilehtml begin
+##          for j in 1:1000
+##              @timeit to "advance!" advance!(plasmafuture, grid1D, dtimplicit / nsubsteps,grid1Dfuture, 0.5)
+##          end
+##      end
+##      throw(error("dasfafjabnfdsflin"))
       @timeit to "deposit" depositcurrent!(grid1Dfuture, plasmafuture)
       @timeit to "source" sources!(Sfuture, grid1Dfuture)
     end

@@ -1,4 +1,4 @@
-using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LoopVectorization, StatProfilerHTML
+using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LoopVectorization, StatProfilerHTML, LinearAlgebra
 
 function foo()
   NX = 64;
@@ -28,9 +28,11 @@ function foo()
   
   dataxvw = zeros(DIMS + 3 + 1, NP);
   dataxvw[1:DIMS, :] .= rand(DIMS, NP) .* (b .- a) .+ a
-  dataxvw[DIMS+1, :] .= rand((-1, 1), NP)
+  v0 = 0.1
+  dataxvw[DIMS+1, :] .= rand((-v0, v0), NP)
   particledata = DGMaxwellPIC.ParticleData(dataxvw);
-  weight!(particledata, 32 * pi^2 / 2 * area / length(particledata));
+  weight = 16 * pi^2 / 3 / area / length(particledata) * v0^2;
+  weight!(particledata, weight);
   
   plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)]);
   sort!(plasma, grid2D) # sort particles by cellid
@@ -43,6 +45,7 @@ function foo()
   k4 = deepcopy(u);
   work = deepcopy(u);
   S = deepcopy(u);
+  S1 = deepcopy(u);
   
   dtc = norm((b .- a)./sqrt((NX * OX)^2 + (NY * OY)^2)) / DGMaxwellPIC.speedoflight
   dt = dtc * 0.1
@@ -83,13 +86,28 @@ function foo()
   nturns = 0.5
   NI = Int(ceil((b[1]-a[1]) / dt * nturns * v0))
   @show nturns, ngifevery, NI
+  @timeit to "source" sources!(S1, grid2D) # sources known at middle of timestep n+1/2
   @gif for i in 0:NI-1
-    @timeit to "advance!" advance!(plasma, grid2D, dt) # pretend plasma is 1/2 timestep behind fields, so leapfrog to n+1/2
+    # pretend plasma is 1/2 timestep behind fields,
+    # copy the up to date current into S
+    @timeit to "source" @tturbo S .= S1
+    # leapfrog plasma from n-1/2 to n+1/2 using fields at n
+    @timeit to "advance!" advance!(plasma, grid2D, dt)
+    # deposit current to grid
     @timeit to "deposit" depositcurrent!(grid2D, plasma)
-    @timeit to "source" sources!(S, grid2D) # sources known at middle of timestep n+1/2
-    @timeit to "stepfields" stepfieldsRK4!(u, A, k1, k2, k3, k4, work, dt, S) # advance fields to end of timestep n+1
-#    @timeit to "stepfields" bicgstabl!(u, CN⁻, mul!(work, CN⁺, u), reltol=1000eps())
+    # now get the current at n+1/2
+    @timeit to "source" sources!(S1, grid2D)
+    # average to get current at n
+    @timeit to "source" @tturbo S .= (S .+ S1) / 2
+    # step fields from n to n+1
+##    @timeit to "stepfields" stepfieldsHeun!(u, A, k1, k2, work, dt, S)
+##    @timeit to "stepfields" stepfieldsEuler!(u, A, k1, work, dt, S)
+    @timeit to "stepfields" stepfieldsRK4!(u, A, k1, k2, k3, k4, work, dt, S)
+##    @timeit to "stepfields" bicgstabl!(u, CN⁻, mul!(work, CN⁺, u), reltol=1000eps())
+    # write the field dofs back to the grid for next advance
     @timeit to "dofs!" dofs!(grid2D, u)
+
+
 #    if i == 1
 #      @profilehtml begin
 #        for j in 1:10

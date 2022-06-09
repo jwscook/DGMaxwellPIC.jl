@@ -82,7 +82,7 @@ function foo()
 
   to = TimerOutput()
   ngifevery = Int(ceil((b[1]-a[1])/8NX / dt)) * 16
-  nturns = 0.1
+  nturns = 2.0
   NI = Int(ceil((b[1]-a[1]) * nturns  / (dt * v0)))
   @show dt, NX, OX, nturns, ngifevery, NI, dt * NI
   @timeit to "source" sources!(S1, grid1D) # sources known at middle of timestep n+1/2
