@@ -35,7 +35,6 @@ include("Grids.jl")
 include("DofUtilities.jl")
 include("Assembly.jl")
 include("ParticleData.jl")
-include("ParticlePushers.jl")
 include("Species.jl")
 include("Plasma.jl")
 

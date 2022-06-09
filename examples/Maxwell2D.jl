@@ -81,13 +81,13 @@ function stepfieldsRK4!(u, M, k1, k2, k3, k4, work, dt)
   @timeit to "u .+= " @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
 end
 
-@gif for i in 1:NI
+@gif for i in 0:NI-1
   #@timeit to "stepfieldsRK4" stepfieldsRK4!(u, M, k1, k2, k3, k4, work, dt)
   #@timeit to "stepfieldsHuen" stepfieldsHeun!(u, M, k1, k2, work, dt)
   #@timeit to "u .= A * u" u .= A * u
   #@timeit to "u .= lu(CN⁻) * CN⁺ * u" SuiteSparse.UMFPACK.solve!(u, luCN⁻, mul!(work, CN⁺, z), 0)
   @timeit to "u .= bigcgstabl! CN" bicgstabl!(u, CN⁻, mul!(work, CN⁺, u), reltol=1000eps())
-  if i % ngifevery == 1 # only do this if we need to make plots
+  if i % ngifevery == 0 # only do this if we need to make plots
     @timeit to "dofs!" dofs!(grid2D, u)
   end
   Eyresult = [electricfield(grid2D, xi, 2) for xi in centres]

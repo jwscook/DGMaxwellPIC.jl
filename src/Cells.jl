@@ -8,14 +8,14 @@ struct Cell{N, T<:BasisFunctionType, U}
     return new{N,T,U}(state, lower, upper, 1.0 ./ (upper .- lower))
   end
 end
-Base.in(x::Number, c::Cell{1}) = @inbounds c.lower[1] <= x < c.upper[1]
-Base.in(x, c::Cell{1}) = @inbounds c.lower[1] <= x[1] < c.upper[1]
-Base.in(x, c::Cell{2}) = @inbounds (c.lower[1] <= x[1] < c.upper[1]) &&
-                                   (c.lower[2] <= x[2] < c.upper[2])
-Base.in(x, c::Cell{3}) = @inbounds (c.lower[1] <= x[1] < c.upper[1]) &&
-                                   (c.lower[2] <= x[2] < c.upper[2]) &&
-                                   (c.lower[3] <= x[3] < c.upper[3])
-_in(x, c::Cell, i) = @inbounds c.lower[i] <= x[i] < c.upper[i]
+Base.in(x::Number, c::Cell{1}) = @inbounds c.lower[1] < x <= c.upper[1]
+Base.in(x, c::Cell{1}) = @inbounds c.lower[1] < x[1] <= c.upper[1]
+Base.in(x, c::Cell{2}) = @inbounds (c.lower[1] < x[1] <= c.upper[1]) &&
+                                   (c.lower[2] < x[2] <= c.upper[2])
+Base.in(x, c::Cell{3}) = @inbounds (c.lower[1] < x[1] <= c.upper[1]) &&
+                                   (c.lower[2] < x[2] <= c.upper[2]) &&
+                                   (c.lower[3] < x[3] <= c.upper[3])
+_in(x, c::Cell, i) = @inbounds c.lower[i] < x[i] <= c.upper[i]
 Base.in(x, c::Cell{N}) where N = all(i -> _in(x, c, i), 1:N)
 dofshape(c::Cell) = dofshape(c.state)
 function jacobian(c::Cell{N}; ignore=0) where N

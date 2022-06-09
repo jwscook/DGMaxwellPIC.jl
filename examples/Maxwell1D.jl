@@ -90,7 +90,7 @@ function substep!(y, w, A, u, k, a)
   mul!(y, A, w)
 end
 
-@gif for i in 1:NI
+@gif for i in 0:NI-1
   @timeit to "k1 =" mul!(k1, M, u)
   @timeit to "k2 =" substep!(k2, work, M, u, k1, dt/2)
   @timeit to "k3 =" substep!(k3, work, M, u, k2, dt/2)
@@ -98,7 +98,7 @@ end
   @timeit to "u .+=" @tturbo for i in eachindex(u); u[i] += dt * (k1[i] + 2k2[i] + 2k3[i] + k4[i]) / 6; end
   #@timeit to "u .= A * u" u .= A * u
   t = i * dt
-  if i % ngifevery == 1 # only do this if we need to make plots
+  if i % ngifevery == 0 # only do this if we need to make plots
     @timeit to "dofs!" dofs!(grid1D, u)
     p1 = plot(x, electricfield(grid1D, 1), ylims=[-s0,s0])
     p2 = plot(x, electricfield(grid1D, 2), ylims=[-s0,s0]); title!("$i of $NI")

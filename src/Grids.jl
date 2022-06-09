@@ -27,8 +27,10 @@ function likelycellindex(g::Grid{N}, x) where N
   lb = lower(g)
   il = inverselengths(g)
   ind = SVector{N,Int}(Int.(ceil.(size(g) .* (x .- lb) .* il)))
-  any(<(1), ind) && throw(DomainError("Position $x is out of bounds"))
-  any(ij->ij[1] > ij[2], zip(ind, size(g))) && throw(DomainError("Position $x is out of bounds"))
+  if any(<(1), ind) || any(ij->ij[1] > ij[2], zip(ind, size(g)))
+    @show size(g), x, lb, il
+    throw(DomainError("Position $x is out of bounds with index $ind"))
+  end
   return ind
 end
 Base.size(g::Grid) = size(g.data)
@@ -305,12 +307,13 @@ end
 
 function cellid(g::Grid{N}, x)::SVector{N, Int64} where {N}
   index = likelycellindex(g, x)
-  inxg = in(x, g[index]) && return index
+  in(x, g[index]) && return index
   for i in CartesianIndices(g.data)
     if in(x, g[i])
       return SVector{N,Int}(Tuple(i))
     end
   end
+  @show lower(g), x, upper(g), index, lower(g[index]), upper(g[index]), in(x, g[index])
   throw(ErrorException("Shouldnt be able to get here: $x"))
 end
 
@@ -341,6 +344,9 @@ divB(g::Grid, x) = divergence(g, x, magneticfield)
 divE(g::Grid, x) = divergence(g, x, electricfield)
 divJ(g::Grid, x) = divergence(g, x, currentfield)
 
-sources!(output, g::Grid) = -speedoflight^2 * mu0 * currentsource!(output, g)
+function sources!(output, g::Grid)
+  currentsource!(output, g)
+  @tturbo @. output *= -speedoflight^2 * mu0
+end
 
 

@@ -32,8 +32,9 @@ function dofs!(s::State{N}, x::AbstractArray, components::UnitRange{Int}=1:6) wh
   l = prod(dofshape(s))
   for (i, c) in enumerate(components)
     sqi = selectdim(s.q, N, dofsindices(s, c))
-    for j in LinearIndices(dofshape(s))
-      sqi[j] = x[(i-1)*l+j]
+    li_l = (i - 1) * l
+    @inbounds for j in LinearIndices(dofshape(s))
+      sqi[j] = x[li_l + j]
     end
   end
   return s

@@ -1,10 +1,11 @@
 using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LoopVectorization, StatProfilerHTML
 using LinearAlgebra, Random, Statistics, QuadGK, Test
+Random.seed!(0)
 
 @testset "Current Deposition" begin
-  NX = 1;
+  NX = 3;
   
-  OX = 9;
+  OX = 7;
   
   state1D = State([OX], LegendreNodes);
   
@@ -17,7 +18,7 @@ using LinearAlgebra, Random, Statistics, QuadGK, Test
   
   grid1D = Grid([Cell(deepcopy(state1D), gridposition(((i-1)/NX,)), gridposition((i/NX,))) for i in 1:NX]);
   
-  NP = NX * OX * 16000
+  NP = NX * OX * 64000
   
   dataxvw = zeros(DIMS + 3 + 1, NP);
   dataxvw[1:DIMS, :] .= rand(DIMS, NP) .* (b .- a) .+ a
