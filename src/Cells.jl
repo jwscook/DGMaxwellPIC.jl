@@ -1,11 +1,11 @@
 
-struct Cell{N, T<:BasisFunctionType, U}
-  state::State{N, T}
+struct Cell{N, T<:BasisFunctionType, U, N⁺¹}
+  state::State{N, T, N⁺¹}
   lower::U # Tuple NTuple Vector, StaticVector, but all N-long
   upper::U
   inverselengths::U
-  function Cell(state::State{N,T}, lower::U, upper::U) where {N,T,U}
-    return new{N,T,U}(state, lower, upper, 1.0 ./ (upper .- lower))
+  function Cell(state::State{N,T,N⁺¹}, lower::U, upper::U) where {N,T,U,N⁺¹}
+    return new{N,T,U,N⁺¹}(state, lower, upper, 1.0 ./ (upper .- lower))
   end
 end
 Base.in(x::Number, c::Cell{1}) = @inbounds c.lower[1] < x <= c.upper[1]

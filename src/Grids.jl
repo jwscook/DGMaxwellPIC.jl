@@ -1,6 +1,6 @@
 
-struct Grid{N,T<:BasisFunctionType,U}
-  data::Array{Cell{N, T, U}, N}
+struct Grid{N, T<:BasisFunctionType, U, N⁺¹}
+  data::Array{Cell{N, T, U, N⁺¹}, N}
   lower::SVector{N,Float64}
   upper::SVector{N,Float64}
   inverselengths::SVector{N,Float64}
@@ -8,11 +8,11 @@ struct Grid{N,T<:BasisFunctionType,U}
   dofrangedict::Dict{NTuple{N,Int}, UnitRange{Int}}
   ndimnodesdict::Dict{NTuple{N,Int}, NDimNodes{N,T}}
   lummdict::Dict{UInt64, LU{Float64, Matrix{Float64}}} # lu of mass matrices
-  function Grid(data::Array{Cell{N, T, U},N}) where {N,T,U}
+  function Grid(data::Array{Cell{N, T, U, N⁺¹},N}) where {N,T,U,N⁺¹}
     lower = SVector{N,Float64}(minimum(x->x.lower, data))
     upper = SVector{N,Float64}(maximum(x->x.upper, data))
     invlengths = SVector{N,Float64}(1 ./ (upper .- lower))
-    return new{N,T,U}(data, lower, upper, invlengths, lookupdicts(data, T)...)
+    return new{N,T,U,N⁺¹}(data, lower, upper, invlengths, lookupdicts(data, T)...)
   end
 end
 #Base.getindex(g::Grid, i...) = g.data[i...]

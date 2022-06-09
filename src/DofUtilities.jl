@@ -47,9 +47,10 @@ function dofs!(grid::Grid, x::Number)
 end
 
 function dofs!(grid::Grid, x::AbstractArray)
-  @threads for i in CartesianIndices(grid.data)
+  @inbounds @views for i in CartesianIndices(grid.data)
     cell = grid[i]
-    dofs!(cell, (@view x[indices(grid, Tuple(i))]))
+    xview = x[indices(grid, Tuple(i))]
+    dofs!(cell, xview)
   end
   return grid
 end
