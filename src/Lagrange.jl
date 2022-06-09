@@ -44,7 +44,7 @@ function Base.isequal(a::AbstractLagrangeNodes, b::AbstractLagrangeNodes)
   return true
 end
 Base.hash(n::AbstractLagrangeNodes) = foldr(hash, (n.nodes, n.nodes), init=hash(n.invdenominators))
-node(n::AbstractLagrangeNodes, i::Int) = n.nodes[i]
+node(n::AbstractLagrangeNodes, i::Int) = @inbounds n.nodes[i]
 weight(n::AbstractLagrangeNodes, i::Int) = n.weights[i]
 nodes(n::AbstractLagrangeNodes) = n.nodes
 weights(n::AbstractLagrangeNodes) = n.weights
@@ -72,7 +72,7 @@ end
 Base.size(n::NDimNodes) = n.size
 Base.hash(n::NDimNodes) = n.uniqueid
 ndofs(n::NDimNodes) = prod(length, n.nodes)
-workarray(n::NDimNodes, tid) = n.works[tid]
+workarray(n::NDimNodes) = @inbounds n.works[threadid()]
 
 function integral(n::NDimNodes{N}, dofs::AbstractMatrix) where {N}
   output = 0.0
@@ -107,7 +107,7 @@ ndims(n::NDimNodes) = length(n.nodes)
 #evaluate one function without coefficient
 function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Number}
   T = promote_type(R, eltype(n))
-  output = T(n.invdenominators[ind])
+  @inbounds output = T(n.invdenominators[ind])
   @inbounds for j in eachindex(n)
     output *= j == ind ? T(1) : T(x - node(n, j))
   end
@@ -133,7 +133,7 @@ function lagrange(x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
   return output
 end
 function lagrange!(output, x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
-  work = workarray(nodes, threadid())
+  work = workarray(nodes)
   @inbounds for i in CartesianIndices(work)
     work[i] = lagrange(x, nodes, Tuple(i))
   end
