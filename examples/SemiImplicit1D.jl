@@ -1,6 +1,6 @@
 using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LoopVectorization, QuadGK
 using LinearAlgebra, StatProfilerHTML, IterativeSolvers, Base.Threads, Random, Statistics
-using StatProfilerHTML
+using Profile
 
 function foo()
   NX = 64;
@@ -18,7 +18,7 @@ function foo()
   gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
   
   grid1D = Grid([Cell(deepcopy(state1D), gridposition((i-1)/NX), gridposition(i/NX)) for i in 1:NX]);
-  NP = NX * OX * 8
+  NP = NX * OX * 32
   
   dataxvw = zeros(DIMS + 3 + 1, NP);
   dataxvw[1:DIMS, :] .= rand(DIMS, NP) .* (b .- a) .+ a
@@ -61,7 +61,7 @@ function foo()
 
   to = TimerOutput()
   ngifevery = max(2, Int(ceil((b[1]-a[1])/NX / dtimplicit))) * 2
-  nturns = 0.1
+  nturns = 2.0
   NI = Int(ceil((b[1]-a[1]) * nturns / (dtimplicit * v0)))
   cellxingtime = (b[1] - a[1]) / NX / v0
   nsubsteps = Int(ceil(dtimplicit / cellxingtime))
@@ -89,7 +89,6 @@ function foo()
       #@profilehtml for i in 1:100000
       #    dofs!(grid1Dfuture, ufuture)
       #end
-      throw(error("asdfagadf"))
       for j in 1:nsubsteps
         @timeit to "advance!" advance!(plasmafuture, grid1D, dtimplicit / nsubsteps,
           grid1Dfuture, (j-0.5)/nsubsteps)

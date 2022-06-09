@@ -45,7 +45,8 @@ function Base.sort!(p::ParticleData{N}, g::Grid) where N
     p.cellids[i] = linear[CartesianIndex(Tuple(index))]
     @assert 0 < p.cellids[i] <= length(g)
   end
-  sortperm!(p.perm, p.cellids)
+  # InsertionSort is good for almost sorted data
+  sortperm!(p.perm, p.cellids, alg=InsertionSort)
   @inbounds @threads for j in 1:size(p.data, 2)
     permj = p.perm[j]
     for i in axes(p.data, 1)

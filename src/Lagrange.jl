@@ -138,7 +138,11 @@ function lagrange!(output, x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where 
     work[i] = lagrange(x, nodes, Tuple(i))
   end
   @inbounds for (j, dofs) in enumerate(dofsargs)
-    output[j] = dot(work, dofs)
+    dotworkdofs = zero(promote_type(eltype(work), eltype(dofs)))
+    @turbo for k in eachindex(work)
+      dotworkdofs += work[k] * dofs[k]
+    end
+    output[j] = dotworkdofs
   end
   return output
 end
