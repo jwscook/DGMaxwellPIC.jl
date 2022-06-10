@@ -26,7 +26,8 @@ Base.getindex(g::Grid{3}, i::IndexUnion{3}) = @inbounds g.data[i[1], i[2], i[3]]
 function likelycellindex(g::Grid{N}, x) where N
   lb = lower(g)
   il = inverselengths(g)
-  ind = SVector{N,Int}(Int.(ceil.(size(g) .* (x .- lb) .* il)))
+  sg = size(g)
+  ind = SVector{N,Int}((@inbounds Int(ceil(sg[i] * (x[i] - lb[i]) * il[i])) for i in eachindex(x)))
   if any(<(1), ind) || any(ij->ij[1] > ij[2], zip(ind, size(g)))
     @show size(g), x, lb, il
     throw(DomainError("Position $x is out of bounds with index $ind"))
@@ -128,12 +129,10 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
   @eval function $(privatefname!)(dofs, x, component::Integer, value,
       solvedofsornot::MaybeSolveDofs, nodes)
     @assert 1 <= component <= $len
-    @assert !any(isnan, x)
     N = length(size(dofs))
     all(-1 <= x[i] <= 1 for i in 1:N) || @warn "x outside [-1, 1]^n"
     fill!(dofs, 0)
     lagrange!(dofs, x, nodes, value, solvedofsornot)
-    @assert !any(isnan, dofs)
   end
 
   @eval function $(fname)(s::State{N, NodeType}, nodes, x, component) where {N, NodeType}
@@ -159,7 +158,6 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
       args = Tuple($(fnamedofs)(s, i) for i in 1:$len)
       lagrange!(output, x, nodes, args...)
     end
-    @assert !any(isnan, output)
     return output
   end
 
