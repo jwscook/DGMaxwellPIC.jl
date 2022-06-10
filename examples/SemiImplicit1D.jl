@@ -61,7 +61,7 @@ function foo()
 
   to = TimerOutput()
   ngifevery = max(2, Int(ceil((b[1]-a[1])/NX / dtimplicit))) * 8
-  nturns = 2.0
+  nturns = 0.1
   NI = Int(ceil((b[1]-a[1]) * nturns / (dtimplicit * v0)))
   cellxingtime = (b[1] - a[1]) / NX / v0
   nsubsteps = Int(ceil(dtimplicit / cellxingtime))
@@ -86,22 +86,29 @@ function foo()
       @timeit to "stepfields" @tturbo @. work += (S + Sfuture) * dtimplicit / 2
       @timeit to "stepfields" ufuture .= luCN⁻ \ work
       @timeit to "dofs!" dofs!(grid1Dfuture, ufuture)
-      #@profilehtml for i in 1:100000
-      #    dofs!(grid1Dfuture, ufuture)
-      #end
       for j in 1:nsubsteps
         @timeit to "advance!" advance!(plasmafuture, grid1D, dtimplicit / nsubsteps,
           grid1Dfuture, (j-0.5)/nsubsteps)
       end
-
-##      @profilehtml begin
-##          for j in 1:1000
-##              @timeit to "advance!" advance!(plasmafuture, grid1D, dtimplicit / nsubsteps,grid1Dfuture, 0.5)
-##          end
-##      end
-##      throw(error("dasfafjabnfdsflin"))
       @timeit to "deposit" depositcurrent!(grid1Dfuture, plasmafuture)
       @timeit to "source" sources!(Sfuture, grid1Dfuture)
+      #if i == 2
+      #  @profilehtml begin
+      #    for j in 1:1000
+      #      @timeit to "stepfields" mul!(work, CN⁺, u)
+      #      @timeit to "stepfields" @tturbo @. work += (S + Sfuture) * dtimplicit / 2
+      #      @timeit to "stepfields" ufuture .= luCN⁻ \ work
+      #      @timeit to "dofs!" dofs!(grid1Dfuture, ufuture)
+      #      for j in 1:nsubsteps
+      #        @timeit to "advance!" advance!(plasmafuture, grid1D, dtimplicit / nsubsteps,
+      #          grid1Dfuture, (j-0.5)/nsubsteps)
+      #      end
+      #      @timeit to "deposit" depositcurrent!(grid1Dfuture, plasmafuture)
+      #      @timeit to "source" sources!(Sfuture, grid1Dfuture)
+      #    end
+      #  end
+      #  throw(error("dasfafjabnfdsflin"))
+      #end # if i == 2
     end
     S .= Sfuture
     u .= ufuture

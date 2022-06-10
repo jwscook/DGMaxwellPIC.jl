@@ -17,6 +17,7 @@ using QuadGK
 using SparseArrays
 using SpecialPolynomials
 using StaticArrays
+using ThreadsX
 
 const speedoflight = 1.0
 const epsilon0 = 1.0
