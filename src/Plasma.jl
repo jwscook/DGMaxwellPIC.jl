@@ -28,7 +28,7 @@ function depositcurrent!(g::Grid{N}, plasma::Plasma) where N
     q = charge(species)
     j, _, _ = workarrays(species)
     @threads for jj in 1:size(v, 2)
-       @inbounds for i in 1:N
+      @inbounds for i in 1:N
         j[i, jj] = q * w[jj] * v[i, jj]
       end
     end
@@ -41,8 +41,8 @@ end
 function periodicbcsapply!(x, g::Grid)
   lb = lower(g)
   ub = upper(g)
-  @. x = mod(x - lb, ub - lb) + lb
-  for i in eachindex(x)
+  @inbounds for i in eachindex(x)
+    x[i] = mod(x[i] - lb[i], ub[i] - lb[i]) + lb[i]
     x[i] == lb[i] && (x[i] = ub[i])
   end
 end
