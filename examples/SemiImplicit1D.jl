@@ -42,7 +42,7 @@ function foo()
   
   dl = norm(b .- a) / (NX * OX)
   maxprobableparticlespeed = 4 * v0
-  dtimplicit = dl / maxprobableparticlespeed
+  dtimplicit = dl / maxprobableparticlespeed * 4
 
   CN⁻ = I - A * dtimplicit / 2;
   CN⁺ = I + A * dtimplicit / 2;
@@ -61,11 +61,12 @@ function foo()
 
   to = TimerOutput()
   ngifevery = max(2, Int(ceil((b[1]-a[1])/NX / dtimplicit))) * 8
-  nturns = 0.1
+  nturns = 4.0
   NI = Int(ceil((b[1]-a[1]) * nturns / (dtimplicit * v0)))
-  cellxingtime = (b[1] - a[1]) / NX / v0
-  nsubsteps = Int(ceil(dtimplicit / cellxingtime))
-  @show dtimplicit, nturns, ngifevery, NI, dtimplicit * NI, nsubsteps
+  cellsize = (b[1] - a[1]) / NX
+  ncellscoveredbyfastest = dtimplicit * maxprobableparticlespeed / cellsize
+  nsubsteps = Int(ceil(ncellscoveredbyfastest))
+  @show dtimplicit, nturns, ngifevery, NI, dtimplicit * NI, nsubsteps, ncellscoveredbyfastest
 
   @timeit to "source" sources!(S, grid1D)
   @gif for i in 0:NI-1
