@@ -114,6 +114,24 @@ function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Number}
   return output::T
 end
 
+@inline function allmultiply(x, nodes::NDimNodes{N}) where N
+  p = one(promote_type(Float64, eltype(x)))
+  @inbounds for i in 1:N
+    xi = x[i]
+    for nj in nodes[i]
+      p *= xi - nj
+    end
+  end
+  return p
+end
+
+@inline function rescale(p::Number, x, nodes::NDimNodes, indextuple)
+  @inbounds for (j, node) in enumerate(nodes)
+    p *= node.invdenominators[indextuple[j]] / (x[j] - node[indextuple[j]])
+  end
+  return p
+end
+
 lagrange(x::Number, n::AbstractLagrangeNodes, ind::Integer) = n(x, ind)
 lagrange(x::Number, n::AbstractLagrangeNodes, ind::Integer, coeff::Number) = n(x, ind) * coeff
 
@@ -132,17 +150,46 @@ function lagrange(x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
   lagrange!(output, x, nodes, dofsargs...)
   return output
 end
-function lagrange!(output, x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
+
+"""
+Evaluate the basis functions and then multiply by the dofs
+
+Equivalent to but faster than:
+```
+function oldlagrange!(output, x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
   work = workarray(nodes)
   @inbounds for i in CartesianIndices(work)
     work[i] = lagrange(x, nodes, Tuple(i))
   end
   @inbounds for (j, dofs) in enumerate(dofsargs)
-    dotworkdofs = zero(promote_type(eltype(work), eltype(dofs)))
-    @turbo for k in eachindex(work)
-      dotworkdofs += work[k] * dofs[k]
+    output[j] = dot(work, dofs)
+  end
+  return output
+end
+```
+"""
+function lagrange!(output, x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
+  p = allmultiply(x, nodes)
+  if iszero(p) # then use division-free implementation
+    work = workarray(nodes)
+    @inbounds for i in CartesianIndices(size(nodes))
+      work[i] = lagrange(x, nodes, Tuple(i))
     end
-    output[j] = dotworkdofs
+    @inbounds for (j, dofs) in enumerate(dofsargs)
+      dotworkdofs = zero(promote_type(eltype(work), eltype(dofs)))
+      @turbo for k in eachindex(work)
+        dotworkdofs += work[k] * dofs[k]
+      end
+      output[j] = dotworkdofs
+    end
+  else
+    fill!(output, 0)
+    @inbounds for i in CartesianIndices(size(nodes))
+      tmp = rescale(p, x, nodes, Tuple(i))
+      @inbounds for (j, dofs) in enumerate(dofsargs)
+        output[j] += tmp * dofs[i]
+      end
+    end
   end
   return output
 end
@@ -159,8 +206,15 @@ function solvedofsifnecessary!(dofs, nodes, d::DelayDofsSolve)
 end
 
 function lagrangeinner!(dofs, x::AbstractVector, nodes, value)
-  @inbounds for i in CartesianIndices(dofs)
-    dofs[i] += lagrange(x, nodes, Tuple(i)) * value
+  p = allmultiply(x, nodes)
+  if iszero(p) # use algorithm that won't divide by zero
+    @inbounds for i in CartesianIndices(dofs)
+      dofs[i] += lagrange(x, nodes, Tuple(i)) * value
+    end
+  else # use faster algo, which is most of the time
+    @inbounds for i in CartesianIndices(dofs)
+      dofs[i] += rescale(p, x, nodes, Tuple(i)) * value
+    end
   end
 end
 function lagrange!(dofs, x::AbstractVector, nodes::NDimNodes{N}, value,
