@@ -25,6 +25,7 @@ SpecialPolynomials = "a25cea48-d430-424a-8ee7-0d3ad3742e9e"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 SuiteSparse = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
+ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

@@ -18,7 +18,7 @@ struct ParticleData{N, T<:AbstractArray}
     return new{size(data, 1) - 4, typeof(data)}(data,
       collect(1:npart),
       zeros(Int64, npart),
-      zeros(Int64, npart),
+      collect(1:npart),
       zeros(Float64, 3, npart),
       zeros(Float64, 6, npart),
       zeros(Float64, 6, npart),
@@ -35,7 +35,6 @@ end
 
 Base.length(p::ParticleData) = size(p.data, 2)
 Base.eltype(p::ParticleData) = eltype(p.data)
-
 function Base.sort!(p::ParticleData{N}, g::Grid) where N
   x = position(p)
   linear = LinearIndices(size(g))
@@ -45,8 +44,9 @@ function Base.sort!(p::ParticleData{N}, g::Grid) where N
     p.cellids[i] = linear[CartesianIndex(Tuple(index))]
     @assert 0 < p.cellids[i] <= length(g)
   end
-  # InsertionSort is good for almost sorted data
-  sortperm!(p.perm, p.cellids, alg=InsertionSort)
+#  sortperm!(p.perm, p.cellids, alg=InsertionSort) # InsertionSort is good for almost sorted data
+  sortpermlt(i, j) = p.cellids[i] < p.cellids[j]
+  ThreadsX.sort!(p.perm, lt=sortpermlt, alg=ThreadsX.StableQuickSort)
   @inbounds @threads for j in 1:size(p.data, 2)
     permj = p.perm[j]
     for i in axes(p.data, 1)
