@@ -15,7 +15,6 @@ function foo()
   b = ones(DIMS);#a .+ rand(DIMS) .* 10;
   area = prod(b .- a)
   
-  
   grid1D = Grid(state1D, a, b, (NX,))
   NP = NX * OX * 32
   
@@ -30,14 +29,11 @@ function foo()
   
   plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)]);
   sort!(plasma, grid1D) # sort particles by cellid
-  plasmafuture = deepcopy(plasma)
   
   A = assemble(grid1D);
   u = dofs(grid1D);
-  ufuture = deepcopy(u);
   work = deepcopy(u);
   S = deepcopy(u);
-  Sfuture = deepcopy(u);
   
   dl = norm(b .- a) / (NX * OX)
   maxprobableparticlespeed = 4 * v0
@@ -47,9 +43,6 @@ function foo()
   CN⁺ = I + A * dtimplicit / 2;
   luCN⁻ = lu(CN⁻)
   workmatrix = deepcopy(A);
-  
-  grid1Dfuture = deepcopy(grid1D)
-  sort!(plasma, grid1Dfuture)
  
   function work!(output, mat, vec)
     output .= mat
@@ -69,53 +62,25 @@ function foo()
 
   @timeit to "source" sources!(S, grid1D)
   @gif for i in 0:NI-1
-    ufuture .= u
-    Sfuturenorm = norm(Sfuture)
-    normu = Inf
     j = 0
-    while (j += 1) < 16 && !isapprox(norm(ufuture), normu, rtol=1e-8, atol=100eps())
-      normu = norm(ufuture)
-      copyto!(plasmafuture, plasma)
-      #=
-      @timeit to "stepfields" work!(workmatrix, CN⁺, S)
-      @timeit to "stepfields" mul!(work, workmatrix, u)
-      @timeit to "stepfields" work!(workmatrix, CN⁻, Sfuture)
-      @timeit to "stepfields" bicgstabl!(ufuture, workmatrix, work)
-      =#
-      @timeit to "stepfields" mul!(work, CN⁺, u)
-      @timeit to "stepfields" @tturbo @. work += (S + Sfuture) * dtimplicit / 2
-      @timeit to "stepfields" ufuture .= luCN⁻ \ work
-      @timeit to "dofs!" dofs!(grid1Dfuture, ufuture)
-      for j in 1:nsubsteps
-        @timeit to "advance!" advance!(plasmafuture, grid1D, dtimplicit / nsubsteps,
-          grid1Dfuture, (j-0.5)/nsubsteps)
-      end
-      @timeit to "deposit" depositcurrent!(grid1Dfuture, plasmafuture)
-      @timeit to "source" sources!(Sfuture, grid1Dfuture)
-      #if i == 2
-      #  @profilehtml begin
-      #    for j in 1:1000
-      #      @timeit to "stepfields" mul!(work, CN⁺, u)
-      #      @timeit to "stepfields" @tturbo @. work += (S + Sfuture) * dtimplicit / 2
-      #      @timeit to "stepfields" ufuture .= luCN⁻ \ work
-      #      @timeit to "dofs!" dofs!(grid1Dfuture, ufuture)
-      #      for j in 1:nsubsteps
-      #        @timeit to "advance!" advance!(plasmafuture, grid1D, dtimplicit / nsubsteps,
-      #          grid1Dfuture, (j-0.5)/nsubsteps)
-      #      end
-      #      @timeit to "deposit" depositcurrent!(grid1Dfuture, plasmafuture)
-      #      @timeit to "source" sources!(Sfuture, grid1Dfuture)
-      #    end
-      #  end
-      #  throw(error("dasfafjabnfdsflin"))
-      #end # if i == 2
+    #=
+    @timeit to "stepfields" work!(workmatrix, CN⁺, S)
+    @timeit to "stepfields" mul!(work, workmatrix, u)
+    @timeit to "stepfields" work!(workmatrix, CN⁻, S)
+    @timeit to "stepfields" bicgstabl!(u, workmatrix, work)
+    =#
+    for _ in 1:nsubsteps # plasma starts n-1/2 so advance to n+1/2
+      @timeit to "advance!" advance!(plasma, grid1D, dtimplicit / nsubsteps)
     end
-    S .= Sfuture
-    u .= ufuture
-    copyto!(plasma, plasmafuture)
-    @timeit to "dofs!" dofs!(grid1D, u) # not necessary?
+    @timeit to "deposit" depositcurrent!(grid1D, plasma; zerocurrentfirst=true)
+    @timeit to "source" sources!(S, grid1D) # S n+1/2
+    @timeit to "stepfields" mul!(work, CN⁺, u) # do implicit timestep from n to n+1
+    @timeit to "stepfields" @tturbo @. work += S * dtimplicit
+    @timeit to "stepfields" ldiv!(u, luCN⁻, work)
+    @timeit to "dofs!" dofs!(grid1D, u) # update grid to n+1
+
     if i % ngifevery == 0 # only do this if we need to make plots
-       #current = quadgk(x->currentfield(grid1Dfuture, [x], 1), a[1], b[1])[1]
+       #current = quadgk(x->currentfield(grid1D, [x], 1), a[1], b[1])[1]
        #meanfieldcurrentdensity = current / prod(b - a)
        #meanparticlecurrentdensity = sum(DGMaxwellPIC.xvelocity(plasma.species[1])) *
        #  weight / prod(b - a)
