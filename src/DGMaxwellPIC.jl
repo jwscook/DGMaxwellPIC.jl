@@ -45,7 +45,7 @@ export electricfield, magneticfield, currentfield, chargefield
 export electricfield!, magneticfield!, currentfield!, chargefield!
 export facedofindices, dofs, dofs!, currentdofs
 export assemble
-export depositcurrent!
+export depositcurrent!, zerocurrent!
 export sources, sources!
 export Species, weight!
 export Plasma, advance!

@@ -19,8 +19,10 @@ function Base.sort!(p::Plasma, g::Grid)
   return p
 end
 
-function depositcurrent!(g::Grid{N}, plasma::Plasma) where N
-  currentfielddofs!(g, 0) # zero current
+zerocurrent!(g::Grid) = currentfielddofs!(g, 0)
+
+function depositcurrent!(g::Grid{N}, plasma::Plasma; zerocurrentfirst=true) where N
+  zerocurrentfirst && zerocurrent!(g)
   #@assert issorted(plasma)
   for species in plasma
     v = velocity(species)

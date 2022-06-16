@@ -15,7 +15,16 @@ struct Grid{N, T<:BasisFunctionType, U, N⁺¹}
     return new{N,T,U,N⁺¹}(data, lower, upper, invlengths, lookupdicts(data, T)...)
   end
 end
-#Base.getindex(g::Grid, i...) = g.data[i...]
+
+function Grid(s::State{N}, lb, ub, NS) where {N}
+  @assert length(NS) == N
+  gridposition(x) = SVector{N, Float64}((x .* (ub .- lb) .+ lb))
+  cells = map(i->Cell(deepcopy(s),
+                      gridposition((Tuple(i) .- 1) ./ NS),
+                      gridposition(Tuple(i) ./ NS)),
+              CartesianIndices(Tuple(NS)))
+  return Grid(cells)
+end
 
 const IndexUnion{N} = Union{NTuple{N,<:Integer},SVector{N,<:Integer},CartesianIndex{N}}
 Base.getindex(g::Grid, i::Integer) = g.data[i]
