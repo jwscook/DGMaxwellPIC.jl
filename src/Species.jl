@@ -25,7 +25,7 @@ end
 
 weight!(s::Species, numberdensity, grid) = weight!(s, numberdensity, lower(grid), upper(grid))
 
-for fname in (:position, :velocity, :weight, :xposition, :yposition, :zposition, :xvelocity, :yvelocity, :zvelecity, :cellids)
+for fname in (:position, :velocity, :weight, :xposition, :yposition, :zposition, :xvelocity, :yvelocity, :zvelocity, :cellids)
   fname! = Symbol(fname, :!)
   @eval $(fname)(s::Species) = $(fname)(s.particledata)
   @eval $(fname)(s::Species, args...) = $(fname)(s.particledata, args...)

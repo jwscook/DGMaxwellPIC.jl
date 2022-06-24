@@ -14,9 +14,7 @@ function foo()
   b = ones(DIMS);#a .+ rand(DIMS) .* 10;
   area = prod(b .- a)
   
-  gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
-  
-  grid1D = Grid([Cell(deepcopy(state1D), gridposition(((i-1)/NX,)), gridposition((i/NX,))) for i in 1:NX]);
+  grid1D = Grid(state1D, a, b, (NX,))
   
   NP = NX * OX * 8
   

@@ -72,11 +72,12 @@ end
 Base.size(n::NDimNodes) = n.size
 Base.hash(n::NDimNodes) = n.uniqueid
 ndofs(n::NDimNodes) = prod(length, n.nodes)
-workarray(n::NDimNodes) = @inbounds n.works[threadid()]
+@inline workarray(n::NDimNodes, ::Type{Float64}) = @inbounds n.works[threadid()]
+@inline workarray(n::NDimNodes, ::Type{T}) where {T} = zeros(promote_type(Float64, T), size(n))
 
 function integral(n::NDimNodes{N}, dofs::AbstractMatrix) where {N}
   output = 0.0
-  for i in CartesianIndices(dofs)
+  @inbounds for i in CartesianIndices(dofs)
     j = Tuple(i)
     output += dofs[i] * prod(integral(n.nodes[d], j[d]) for d in 1:N)
   end
@@ -105,7 +106,7 @@ end
 ndims(n::NDimNodes) = length(n.nodes)
 
 #evaluate one function without coefficient
-function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Number}
+@inline function (n::AbstractLagrangeNodes)(x::R, ind::Integer) where {R<:Number}
   T = promote_type(R, eltype(n))
   @inbounds output = T(n.invdenominators[ind])
   @inbounds for j in eachindex(n)
@@ -135,7 +136,7 @@ end
 lagrange(x::Number, n::AbstractLagrangeNodes, ind::Integer) = n(x, ind)
 lagrange(x::Number, n::AbstractLagrangeNodes, ind::Integer, coeff::Number) = n(x, ind) * coeff
 
-function lagrange(x, nodes::NDimNodes, inds::NTuple{N,Integer}) where {N}
+@inline function lagrange(x, nodes::NDimNodes, inds::NTuple{N,Integer}) where {N}
   @assert length(x) == ndims(nodes) == N
   @inbounds output = nodes[1](x[1], inds[1])
   @inbounds for i in 2:ndims(nodes)
@@ -144,7 +145,7 @@ function lagrange(x, nodes::NDimNodes, inds::NTuple{N,Integer}) where {N}
   return output
 end
 
-function lagrange(x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
+@inline function lagrange(x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
   T1 = promote_type(eltype(x), eltype(first(dofsargs)))
   output = MVector{M,T1}(undef)
   lagrange!(output, x, nodes, dofsargs...)
@@ -170,8 +171,8 @@ end
 """
 function lagrange!(output, x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where {N,T,M}
   p = allmultiply(x, nodes)
-  if iszero(p) # then use division-free implementation
-    work = workarray(nodes)
+  if iszero(p) # then use implementation that can't divide by zero
+    work = workarray(nodes, eltype(x))
     @inbounds for i in CartesianIndices(size(nodes))
       work[i] = lagrange(x, nodes, Tuple(i))
     end
@@ -182,7 +183,7 @@ function lagrange!(output, x, nodes::NDimNodes{N}, dofsargs::Vararg{T,M}) where 
       end
       output[j] = dotworkdofs
     end
-  else
+  else # use the faster method
     fill!(output, 0)
     @inbounds for i in CartesianIndices(size(nodes))
       tmp = rescale(p, x, nodes, Tuple(i))
@@ -434,4 +435,18 @@ function lagrangederiv(x, nodes::NDimNodes, dofs::AbstractArray, derivdirection:
   return mapreduce(i->lagrangederiv(x, nodes, Tuple(i), dofs[i], derivdirection), +, CartesianIndices(dofs))
 end
 
+function curl(x, nodes::NDimNodes{1}, inds)
+  dx = ForwardDiff.derivative(z->nodes[1](z, inds[1]), x[1])
+  return SVector{3}((0.0, -dx, dx))
+end
+function curl(x, nodes::NDimNodes{2}, inds)
+  g = ForwardDiff.gradient(z->nodes(z, inds), x)
+  dx, dy = g
+  return SVector{3}((dy, -dx, dx-dy))
+end
+function curl(x, nodes::NDimNodes{3}, inds)
+  g = ForwardDiff.gradient(z->nodes(z, inds), x)
+  dx, dy, dz = g
+  return SVector{3}((dy-dz, dz-dx, dx-dy))
+end
 

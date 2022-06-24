@@ -21,10 +21,12 @@ OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 Primes = "27ebfcd6-29c5-5fa9-bf4b-fb8fc14df3ae"
 QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+SparseMatricesCSR = "a0a7dd2c-ebf4-11e9-1f05-cf50bc540ca1"
 SpecialPolynomials = "a25cea48-d430-424a-8ee7-0d3ad3742e9e"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 SuiteSparse = "4607b0f0-06f3-5cda-b6b1-a6196a1729e9"
 Suppressor = "fd094767-a336-5f1f-9728-57cf17d0bbfb"
+ThreadedSparseCSR = "39591389-4884-462a-89e7-9edfce40b6eb"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
 
 [extras]

@@ -30,7 +30,7 @@ function depositcurrent!(g::Grid{N}, plasma::Plasma; zerocurrentfirst=true) wher
     q = charge(species)
     j, _, _ = workarrays(species)
     @threads for jj in 1:size(v, 2)
-      @inbounds for i in 1:N
+      @inbounds for i in 1:3
         j[i, jj] = q * w[jj] * v[i, jj]
       end
     end

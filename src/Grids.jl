@@ -32,6 +32,15 @@ Base.getindex(g::Grid{1}, i::IndexUnion{1}) = @inbounds g.data[i[1]]
 Base.getindex(g::Grid{2}, i::IndexUnion{2}) = @inbounds g.data[i[1], i[2]]
 Base.getindex(g::Grid{3}, i::IndexUnion{3}) = @inbounds g.data[i[1], i[2], i[3]]
 
+
+function Base.copyto!(a::Grid{N, T, U, N⁺¹}, b::Grid{N, T, U, N⁺¹}) where {N, T, U, N⁺¹}
+  @assert a.lower == b.lower
+  @assert a.upper == b.upper
+  @assert a.inverselengths == b.inverselengths
+  copyto!(a.data, b.data)
+end
+
+
 function likelycellindex(g::Grid{N}, x) where N
   lb = lower(g)
   il = inverselengths(g)
@@ -151,7 +160,9 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     return lagrange(x, nodes, dofs)[1]
   end
 
-  # this function deserves more work to get rid of if-else statement
+  """
+  Here x is a particle position, which will evaluate the field, fname, and return the value in output
+  """
   @eval function $(fname!)(output::AbstractVector, s::State{N, NodeType}, nodes, x) where {N, NodeType}
     all(-1 <= x[i] <= 1 for i in 1:N) || @warn "x, $x, outside [-1, 1]^n"
     @assert length(output) == $len
@@ -178,7 +189,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
 
   @eval function $(fname!)(output::AbstractMatrix, s::State{N, NodeType}, nodes, x) where {N, NodeType}
     @assert size(output, 2) == size(x, 2)
-    @views for i in axes(output, 2)
+    @views for i in axes(output, 2) # loop over all particles
       $(fname!)(output[:, i], s, nodes, x[:, i])
     end
     return output
@@ -250,6 +261,7 @@ for (fname, offset, len) ∈ ((:electricfield, 0, 3),
     return output
   end
   @eval $(fname)(g::Grid) = ($(fname)(g, i) for i in 1:$len)
+  @eval $(fname)(g::Grid, x::AbstractVector) = [$(fname)(g, x, i) for i in 1:$len]
 
   @eval function $(fname!)(g::Grid{N}, x, args::Vararg) where {N}
     # this is the slow version that processes each particle at a time and finds its cell
@@ -347,9 +359,17 @@ function divergence(g::Grid{N}, x, f::F) where {N, F}
   return sum(j[i, i] for i in 1:N)
 end
 
-divB(g::Grid, x) = divergence(g, x, magneticfield)
-divE(g::Grid, x) = divergence(g, x, electricfield)
-divJ(g::Grid, x) = divergence(g, x, currentfield)
+for (divV, fname) in ((:divB, :magneticfield), (:divE, :electricfield), (:divJ, :currentfield))
+  @eval $(divV)(g::Grid, x) = divergence(g, x, $fname)
+  @eval function $(divV)(g::Grid)
+    output = zeros(size(g))
+    for i in CartesianIndices(size(g))
+      output[i] = $divV(g, centre(g[i]))
+    end
+    return output
+  end
+end
+
 
 function sources!(output, g::Grid)
   currentsource!(output, g)

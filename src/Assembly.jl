@@ -169,6 +169,9 @@ function assemble(g::Grid{N,T}; upwind=0.0) where {N, T}
   volumefluxstiffnessmatrix!(output, g)
   surfacefluxstiffnessmatrix!(output, g, upwind)
   return output
+#  I, J = SparseArrays.findnz(output)
+#  V = SparseArrays.nonzeros(output)
+#  return sparsecsr(I, J, V) # sparsecsr can use threading
 end
 
 @inline function currentloadvector!(output, g::Grid{N, T}, cellindex) where {N,T}

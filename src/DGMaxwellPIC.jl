@@ -15,8 +15,10 @@ using OffsetArrays
 using Primes
 using QuadGK
 using SparseArrays
+#using SparseMatricesCSR
 using SpecialPolynomials
 using StaticArrays
+#using ThreadedSparseCSR
 using ThreadsX
 
 const speedoflight = 1.0

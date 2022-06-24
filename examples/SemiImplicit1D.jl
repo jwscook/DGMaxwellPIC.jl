@@ -15,7 +15,6 @@ function foo()
   b = ones(DIMS);#a .+ rand(DIMS) .* 10;
   area = prod(b .- a)
   
-  
   grid1D = Grid(state1D, a, b, (NX,))
   NP = NX * OX * 32
   

@@ -7,7 +7,7 @@ ThreadedSparseCSR.multithread_matmul(BaseThreads())
 
 function foo()
   NX = 64;
-  NY = 4;
+  NY = 8;
   
   OX = 5;
   OY = 5;
@@ -22,11 +22,6 @@ function foo()
 
   grid2D = Grid(state2D, a, b, (NX, NY))
 
-  #function distributionfunction(xv)
-  #  x = xv[1:2]
-  #  v = xv[3:5]
-  #  return exp(-sum(v.^2))
-  #end
   NP = NX * NY * OX * OY * 32
   
   dataxvw = zeros(DIMS + 3 + 1, NP);
@@ -34,6 +29,7 @@ function foo()
   v0 = 0.1
   dataxvw[DIMS+1, :] .= -v0
   dataxvw[DIMS+1, shuffle(1:NP)[1:NP÷2]] .= v0
+#  dataxvw[DIMS+1:DIMS+3, :] .= randn(3, NP) * v0
   particledata = DGMaxwellPIC.ParticleData(dataxvw);
   weight = 16 * pi^2 / 3 * area / length(particledata) * v0^2;
   weight!(particledata, weight);
@@ -104,10 +100,10 @@ function foo()
     @timeit to "u .+= ..." @tturbo @. u += dt * (k1 + 2k2 + 2k3 + k4) / 6
   end
 
+  nturns = 2.0
   to = TimerOutput()
   ngifevery = Int(ceil((b[1]-a[1])/8NX / dt)) * 16
-  nturns = 2.0
-  NI = 640 # Int(ceil((b[1]-a[1]) * nturns  / (dt * v0)))
+  NI = Int(ceil((b[1]-a[1]) * nturns  / (dt * v0)))
   nsubsteps = 1
   @show nturns, ngifevery, NI
   @timeit to "source" sources!(S, grid2D) # sources known at middle of timestep n+1/2

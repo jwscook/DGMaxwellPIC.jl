@@ -15,9 +15,7 @@ function foo()
   b = [1.0, 1.0 * NY / NX]#ones(DIMS);
   area = prod(b .- a)
   
-  gridposition(x) = SVector{DIMS, Float64}((x .* (b .- a) .+ a))
-  
-  grid2D = Grid([Cell(deepcopy(state2D), gridposition(((i-1)/NX, (j-1)/NY)), gridposition((i/NX, j/NY))) for i in 1:NX, j in 1:NY]);
+  grid2D = Grid(state2D, a, b, (NX, NY))
   
   #function distributionfunction(xv)
   #  x = xv[1:2]
