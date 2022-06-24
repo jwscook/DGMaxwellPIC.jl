@@ -1,6 +1,9 @@
-using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LoopVectorization, QuadGK
-using LinearAlgebra, StatProfilerHTML, IterativeSolvers, Base.Threads, Random, Statistics
-using Profile
+using DGMaxwellPIC, Plots, TimerOutputs, StaticArrays, LoopVectorization, StatProfilerHTML, LinearAlgebra, Random
+using Dates, IterativeSolvers, Base.Threads
+
+using ThreadedSparseCSR
+ThreadedSparseCSR.multithread_matmul(BaseThreads())
+
 
 function foo()
   NX = 64;
@@ -13,11 +16,17 @@ function foo()
   
   DIMS = 2
   
-  a = zeros(DIMS);# randn(DIMS);
-  b = [1.0, 1.0 * NY/NX];#a .+ rand(DIMS) .* 10;
+  a = zeros(DIMS);
+  b = [1.0, 1.0 * NY / NX]#ones(DIMS);
   area = prod(b .- a)
-  
+
   grid2D = Grid(state2D, a, b, (NX, NY))
+
+  #function distributionfunction(xv)
+  #  x = xv[1:2]
+  #  v = xv[3:5]
+  #  return exp(-sum(v.^2))
+  #end
   NP = NX * NY * OX * OY * 32
   
   dataxvw = zeros(DIMS + 3 + 1, NP);
@@ -25,107 +34,135 @@ function foo()
   v0 = 0.1
   dataxvw[DIMS+1, :] .= -v0
   dataxvw[DIMS+1, shuffle(1:NP)[1:NP÷2]] .= v0
-  dataxvw[DIMS+2, :] .= randn(NP)
   particledata = DGMaxwellPIC.ParticleData(dataxvw);
-  weight = 16 * pi^2 / 3 / length(particledata) * v0^2;
-  weight!(particledata, weight)
+  weight = 16 * pi^2 / 3 * area / length(particledata) * v0^2;
+  weight!(particledata, weight);
   
   plasma = Plasma([Species(particledata, charge=1.0, mass=1.0)]);
   sort!(plasma, grid2D) # sort particles by cellid
-  plasmafuture = deepcopy(plasma)
   
-  A = assemble(grid2D);
+  A = assemble(grid2D, upwind=1.0);
   u = dofs(grid2D);
-  ufuture = deepcopy(u);
-  uguess = deepcopy(u) .+ Inf;
+  k1 = deepcopy(u);
+  k2 = deepcopy(u);
+  k3 = deepcopy(u);
+  k4 = deepcopy(u);
   work = deepcopy(u);
   S = deepcopy(u);
-  Sfuture = deepcopy(u);
   
-  dl = norm(b .- a) / sqrt((NX * OX)^2 + (NY * OY)^2)
+  dl = norm((b .- a)./(NX, NY))
+  dldg = dl / (OX^2 + OY^2)
+  dtc = dldg / DGMaxwellPIC.speedoflight
   maxprobableparticlespeed = 4 * v0
-  dtimplicit = dl / maxprobableparticlespeed / 10
-
-  CN⁻ = I - A * dtimplicit / 2;
-  CN⁺ = I + A * dtimplicit / 2;
+  dtimplicit = dldg / DGMaxwellPIC.speedoflight * 100
+  dt = dtimplicit
+  
+  CN⁻ = I - A * dt / 2;
+  CN⁺ = I + A * dt / 2;
   luCN⁻ = lu(CN⁻)
   workmatrix = deepcopy(A);
-  
-  grid2Dfuture = deepcopy(grid2D)
-  sort!(plasma, grid2Dfuture)
+
+  grid2Dcopy = deepcopy(grid2D)
+  sort!(plasma, grid2Dcopy)
  
-  function work!(output, mat, vec)
-    output .= mat
-    for j in axes(output, 2)
-      output[j,j] += vec[j]
+  plasmafuture = deepcopy(plasma)
+  
+  ufuture = deepcopy(u);
+  uguess = deepcopy(u) .+ Inf;
+  Sfuture = deepcopy(u);
+  Smid = deepcopy(u);
+ 
+  grid2Dfuture = deepcopy(grid2D)
+
+
+  function myaxpy!(w, a, x, y)
+    @tturbo for i in eachindex(y)
+      w[i] = a * x[i] + y[i] 
     end
+  end
+  function rksubstep!(y, w, A, u, k, dt, s)
+    myaxpy!(w, dt, k, u)
+    mul!(y, A, w)
+    @tturbo for i in eachindex(y); y[i] += s[i]; end
+  end
+  
+  function stepfieldsEuler!(u, M, k1, work, dt, S)
+    @timeit to "k1 =" rksubstep!(k1, work, M, u, k1, 0, S)
+    @timeit to "u .+= ..." @tturbo @. u += dt * k1
+  end
+  function stepfieldsHeun!(u, M, k1, k2, work, dt, S)
+    @timeit to "k1 =" rksubstep!(k1, work, M, u, k1, 0dt, S)
+    @timeit to "k2 =" rksubstep!(k2, work, M, u, k1, dt, S)
+    @timeit to "u .+= " @tturbo @. u += dt * (k1 + k2) / 2
+  end
+
+  function stepfieldsRK4!(u, M, k1, k2, k3, k4, work, dt, S)
+    @timeit to "k1 =" rksubstep!(k1, work, M, u, k1, 0dt, S)
+    @timeit to "k2 =" rksubstep!(k2, work, M, u, k1, dt/2, S)
+    @timeit to "k3 =" rksubstep!(k3, work, M, u, k2, dt/2, S)
+    @timeit to "k4 =" rksubstep!(k4, work, M, u, k3, dt, S)
+    @timeit to "u .+= ..." @tturbo @. u += dt * (k1 + 2k2 + 2k3 + k4) / 6
   end
 
   to = TimerOutput()
-  ngifevery = max(2, Int(ceil((b[1]-a[1])/NX / dtimplicit))) * 8
-  nturns = 4.0
-  NI = Int(ceil((b[1]-a[1]) * nturns / (dtimplicit * v0)))
-  cellsize = (b[1] - a[1]) / NX
-  ncellscoveredbyfastest = dtimplicit * maxprobableparticlespeed / cellsize
-  nsubsteps = Int(ceil(ncellscoveredbyfastest))
-  @show dtimplicit, nturns, ngifevery, NI, dtimplicit * NI, nsubsteps, ncellscoveredbyfastest
-
-  t1 =@elapsed @timeit to "source" sources!(S, grid2D)
+  ngifevery = Int(ceil((b[1]-a[1])/8NX / dt)) * 16
+  nturns = 2.0
+  NI = 640 # Int(ceil((b[1]-a[1]) * nturns  / (dt * v0)))
+  nsubsteps = 1
+  @show nturns, ngifevery, NI
+  @timeit to "source" sources!(S, grid2D) # sources known at middle of timestep n+1/2
+  t1 = 0.0
   @gif for i in 0:NI-1
     t1 += @elapsed begin
       ufuture .= u
       j = 0
-      while (j += 1) < 32 && !isapprox(ufuture, uguess, rtol=1e-8, atol=eps())
+      while (j += 1) < 32 && !isapprox(ufuture, uguess, rtol=1e-12, atol=eps()^2)
         uguess .= ufuture
-        copyto!(plasmafuture, plasma)
-        #=
-        @timeit to "stepfields" work!(workmatrix, CN⁺, S)
-        @timeit to "stepfields" mul!(work, workmatrix, u)
-        @timeit to "stepfields" work!(workmatrix, CN⁻, Sfuture)
-        @timeit to "stepfields" bicgstabl!(ufuture, workmatrix, work)
-        =#
-        @timeit to "stepfields" mul!(work, CN⁺, u)
-        @timeit to "stepfields" @tturbo @. work += (S + Sfuture) * dtimplicit / 2
-        @timeit to "stepfields" ufuture .= luCN⁻ \ work
-        @timeit to "dofs!" dofs!(grid2Dfuture, ufuture)
+        @timeit to "copyto! plasma" copyto!(plasmafuture, plasma) # reset plasmafuture to the start
         for k in 1:nsubsteps
-          @timeit to "advance!" advance!(plasmafuture, grid2D, dtimplicit / nsubsteps,
-                                         grid2Dfuture, 0.5)#(k-0.5)/nsubsteps)
+          @timeit to "advance!" advance!(plasmafuture, grid2D, dt / nsubsteps,
+                                         grid2Dfuture, (k-0.5)/nsubsteps)
         end
+
         @timeit to "deposit" depositcurrent!(grid2Dfuture, plasmafuture)
         @timeit to "source" sources!(Sfuture, grid2Dfuture)
+        @timeit to "stepfields" begin
+          @timeit to "mul!" mul!(work, CN⁺, u)
+          @timeit to "@tturbo @. +=" @tturbo @. work += (S + Sfuture) * dt / 2
+          @timeit to "bicgstabl!" bicgstabl!(ufuture, CN⁻, work, reltol=1e-8)
+        end
+        @timeit to "dofs!" dofs!(grid2Dfuture, ufuture)
       end
-      S .= Sfuture
-      u .= ufuture
-      copyto!(plasma, plasmafuture)
-      @timeit to "dofs!" dofs!(grid2D, u) # not necessary?
+      @timeit to "newstep copies" begin
+        S, Sfuture = Sfuture, S
+        u, ufuture = ufuture, u
+        plasma, plasmafuture = plasmafuture, plasma
+        grid2D, grid2Dfuture = grid2Dfuture, grid2D
+        @turbo uguess .+= Inf
+      end
+      breakout = false
+
       if i % ngifevery == 0 # only do this if we need to make plots
-         #current = quadgk(x->currentfield(grid2Dfuture, [x], 1), a[1], b[1])[1]
-         #meanfieldcurrentdensity = current / prod(b - a)
-         #meanparticlecurrentdensity = sum(DGMaxwellPIC.xvelocity(plasma.species[1])) *
-         #  weight / prod(b - a)
-         #currentisconsistent = isapprox(meanfieldcurrentdensity, meanparticlecurrentdensity, atol=1e-8)
-         x = DGMaxwellPIC.position(plasma.species[1])
-         v = DGMaxwellPIC.velocity(plasma.species[1])
-         p1 = scatter(x[1, :], v[1, :]); title!("$i of $NI")
-         plot(p1)
-         #x = collect(1/NX/2:1/NX:1-1/NX/2)
-         #Ex = electricfield(grid2D, 1)
-         #@show i, extrema(Ex)#, currentisconsistent
-         #plot!(x, Ex, ylims=[-1,1])
-        #p1 = heatmap(electricfield(grid2D, 1))
-        #p2 = heatmap(electricfield(grid2D, 2))
-        #p3 = heatmap(electricfield(grid2D, 3))
-        #p4 = heatmap(magneticfield(grid2D, 1))
-        #p5 = heatmap(magneticfield(grid2D, 2))
-        #p6 = heatmap(magneticfield(grid2D, 3))
-        #plot(p1, p2, p3, p4, p5, p6, layout = (@layout [a b c; d e f]))
-        println(i, ", ", NI, ", ", t1 * (NI / i - 1) / 60, ", ", t1)
+        x = DGMaxwellPIC.position(plasma.species[1])
+        v = DGMaxwellPIC.velocity(plasma.species[1])
+        p0 = scatter(x[1, :], v[1, :], xlim=(0, 1), ylim=(-1, 1)); title!("$i of $NI")
+        #plot(p0)
+        p1 = heatmap(electricfield(grid2D, 1))
+        p2 = heatmap(electricfield(grid2D, 2))
+        p3 = heatmap(electricfield(grid2D, 3))
+        p4 = heatmap(magneticfield(grid2D, 1))
+        p5 = heatmap(magneticfield(grid2D, 2))
+        p6 = heatmap(magneticfield(grid2D, 3))
+        p123 = heatmap(DGMaxwellPIC.divE(grid2D))
+        p456 = heatmap(DGMaxwellPIC.divB(grid2D))
+        plot(p0, p1, p2, p3, p123, p4, p5, p6, p456, layout = (@layout [a; b c d e; f g h i]))
+        breakout = any(vi->abs(vi)>1, v)
+        println(i, " of ",NI, ": $(Int(round(100i/NI)))%, approx time left ", Time(0) + Second(round(t1 * (NI / (i + 1) - 1))), ", particle subits = ", j)
       end
-      fill!(uguess, Inf)
-    end # t1 += @elapsed begin
+      breakout && break
+    end # elapsed
   end every ngifevery
   show(to)
-end
+  end
 
 foo()
